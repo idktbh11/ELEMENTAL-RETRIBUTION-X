@@ -1,0 +1,18 @@
+{
+    "app_name": "ELEMENTAL RETRIBUTION X",
+    "description": "nothing here to see bud",
+    "main": "index.html",
+    "name": "ELEMENTAL RETRIBUTION X",
+    "version": "1.0",
+    "webkit": {},
+    "window": {
+        "frame": true,
+        "icon": "ChatGPT Image Oct 9, 2026, 10_45_39 PM.png",
+        "id": "ELEMENTAL RETRIBUTION X",
+        "resizable": true,
+        "show": true,
+        "show_in_taskbar": true,
+        "title": "ELEMENTAL RETRIBUTION X",
+        "visible": true
+    }
+}
