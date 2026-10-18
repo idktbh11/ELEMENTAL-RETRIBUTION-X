@@ -8,7 +8,13 @@
  * the animation readable and lets every outfit/hair combo animate for free.
  *
  *   ERX.PlayerSide.frame(look, pose, frame, facing) -> canvas (26x29)
+ *   ERX.PlayerSide.frameJoints(look, joints, facing) -> canvas for ANY joint set
+ *     (the smooth, blended awakened animations: see js/game/awakening.js)
+ *   ERX.PlayerSide.points(joints) -> where the eye / cheek / hands / feet are,
+ *     relative to the feet anchor, facing right (flip dx when facing left)
+ * Extra joint flags: hideHands (hands in pockets), noLegs (lower body hidden).
  * Poses: idle(2) run(6) jump fall attack(3) block dash(3) hurt lie
+ *        + ultimate cutscene poses: clapOpen clap raise raiseBoth push crouch
  * Feet rest on canvas row 25; ANCHOR is the point between the feet.
  */
 (function (ERX) {
@@ -55,13 +61,23 @@
       P({ bob: 1, lean: 3, FL: [[12, 18], [14, 21]], BL: [[5, 19], [2, 20]], FA: [[6, 13], [3, 14]], BA: [[6, 12], [3, 13]], whip: 2 }),
     ],
     sit: [P({ bob: 3, FL: [[12, 19], [12, 22]], BL: [[10, 19], [10, 22]], FA: [[10, 16], [12, 18]], BA: [[7, 16], [9, 18]] })],
+    // ---- ultimate cutscene ----
+    clapOpen: [P({ FA: [[11, 13], [14, 12]], BA: [[5, 13], [2, 12]] })],
+    clap: [P({ lean: 1, FA: [[10, 13], [12, 12]], BA: [[9, 13], [11, 12]] })],
+    raise: [P({ FA: [[10, 9], [10, 5]], BA: [[6, 14], [5, 16]] })],
+    raiseBoth: [P({ FA: [[11, 9], [12, 5]], BA: [[5, 9], [4, 5]] })],
+    push: [P({ lean: 2, FL: [[11, 19], [12, 22]], BL: [[6, 19], [4, 22]], FA: [[12, 12], [15, 12]], BA: [[11, 12], [14, 13]] })],
+    crouch: [P({ bob: 2, FL: [[12, 20], [12, 22]], BL: [[5, 20], [4, 22]], FA: [[11, 14], [13, 15]], BA: [[6, 14], [4, 16]] })],
     hurt: [P({ lean: -2, FL: [[10, 19], [11, 22]], BL: [[6, 19], [5, 22]], FA: [[11, 10], [12, 8]], BA: [[5, 11], [3, 9]], eyesClosed: true, mouthOpen: true })],
   };
 
   function paint(look, pose, frame) {
-    const D = ERX.Data.character;
     const set = POSES[pose] || POSES.idle;
-    const p = set[frame % set.length];
+    return paintPose(look, set[frame % set.length]);
+  }
+
+  function paintPose(look, p) {
+    const D = ERX.Data.character;
     const b = new PB(26, 29);
 
     const skin = D.skins[look.skin].c, skinD = C.shade(skin, -0.2), skinL = C.shade(skin, 0.15);
@@ -105,6 +121,7 @@
       stroke(sh[0], sh[1], e[0], e[1], s);
       stroke(e[0], e[1], h[0], h[1], shortSleeve ? (back ? skinD : skin) : s);
       const fist = !back && p.fist;
+      if (p.hideHands) { px(h[0], h[1] + 1, C.shade(sleeve, -0.5)); return; }
       rect(h[0] - 1, h[1], fist ? 3 : 2, fist ? 3 : 2, back ? skinD : skin);
       if (fist) px(h[0] + 1, h[1], skinL);
     };
@@ -137,8 +154,7 @@
     if (outfit === 6) { const w = p.whip || 0; rect(sx - 5 - w, shoulderY + 1, 4, 2, '#9a2a2a'); px(sx - 6 - w * 2, shoulderY + 3, '#9a2a2a'); } // scarf tail
 
     drawArm(p.BA, true);
-    drawLeg(p.BL, true);
-    drawLeg(p.FL, false);
+    if (!p.noLegs) { drawLeg(p.BL, true); drawLeg(p.FL, false); }
 
     // ---------------- torso ----------------
     for (let y = shoulderY; y <= hipY; y++) {
@@ -259,8 +275,53 @@
     return r;
   }
 
+  /** Round a joint set so it can be painted (and cached by its exact pixels). */
+  function roundJoints(j) {
+    const r = (pt) => [Math.round(pt[0]), Math.round(pt[1])];
+    return Object.assign({}, STAND, j, {
+      bob: Math.round(j.bob || 0), lean: Math.round(j.lean || 0),
+      FL: [r(j.FL[0]), r(j.FL[1])], BL: [r(j.BL[0]), r(j.BL[1])], FA: [r(j.FA[0]), r(j.FA[1])], BA: [r(j.BA[0]), r(j.BA[1])],
+    });
+  }
+  const jointKey = (p) => [p.bob, p.lean, p.FL, p.BL, p.FA, p.BA, p.fist ? 1 : 0, p.hideHands ? 1 : 0, p.noLegs ? 1 : 0, p.eyesClosed ? 1 : 0, p.mouthOpen ? 1 : 0, p.guard ? 1 : 0].join('|');
+
   const PlayerSide = {
     W: 26, H: 29,
+    STAND, POSES,
+    /** The joint set behind a named pose frame. */
+    poseOf(pose, frame) { const set = POSES[pose === 'walk' ? 'run' : pose] || POSES.idle; return set[(frame || 0) % set.length]; },
+
+    /** A frame for any joint set (floats are rounded; cached by the rounded pixels). */
+    frameJoints(look, joints, facing = 1) {
+      const p = roundJoints(joints);
+      const key = ['J', look.gender, look.skin, look.hair, look.hairColor, look.eyes, look.outfit, look.outfitColor, look.pants, look.hat || '', look.armor || '', jointKey(p), facing].join(',');
+      let cv = cache.get(key);
+      if (!cv) {
+        cv = paintPose(look, p).toCanvas();
+        if (facing < 0) cv = ERX.Sprites.mirror(cv);
+        cache.set(key, cv);
+        if (cache.size > 2400) cache.delete(cache.keys().next().value);
+      }
+      return cv;
+    },
+
+    /**
+     * Body points for a joint set, relative to the feet anchor (grid px, facing right):
+     * eye, cheek, headTop, chest, handF, handB, footF, footB.
+     */
+    points(j) {
+      const p = roundJoints(j);
+      const shX = (y) => Math.round((p.lean * (16 - y)) / 5);
+      const shoulderY = 11 + p.bob, hy = shoulderY - 8, hx = 4 + shX(hy + 4);
+      const ax = 8, ay = 23;
+      const pt = (x, y) => ({ dx: x - ax, dy: y - ay });
+      const hand = (h) => pt(h[0] + shX(h[1]), h[1] + p.bob);
+      return {
+        eye: pt(hx + 6, hy + 3), cheek: pt(hx + 6, hy + 5), headTop: pt(hx + 4, hy - 1), mouth: pt(hx + 7, hy + 6),
+        chest: pt(8 + shX(shoulderY + 3), shoulderY + 3), handF: hand(p.FA[1]), handB: hand(p.BA[1]),
+        footF: pt(p.FL[1][0], p.FL[1][1] + 1), footB: pt(p.BL[1][0], p.BL[1][1] + 1),
+      };
+    },
     ANCHOR: { x: OX + 8, y: OY + 23 },
     FRAMES: Object.fromEntries(Object.keys(POSES).map((k) => [k, POSES[k].length])),
 

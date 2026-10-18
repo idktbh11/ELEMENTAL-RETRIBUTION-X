@@ -42,6 +42,7 @@
     if (!ERX.Scenes.worldHidden) ERX.Backgrounds.update(dt, input);
     ERX.Scenes.update(dt, input);
     ERX.Toast.update(dt);
+    ERX.Achievements.update(dt);
     ERX.Cursor.update(dt, input);
     ERX.Audio.update(dt);
     ERX.Fps.update(dt);
@@ -57,6 +58,7 @@
     ctx.restore();
     ERX.Touch.render(ctx, W, H);
     ERX.Toast.render(ctx, W, H);
+    ERX.Achievements.render(ctx, W, H);
     ERX.Scenes.renderTransition(ctx, W, H);
     ERX.Fps.render(ctx);
     if (ERX.Config.DEBUG) drawDebug(ctx, W, H);
@@ -83,6 +85,7 @@
     ERX.Font.init();
     ERX.Sprites.init();
     ERX.Settings.load();
+    ERX.Admin.load();
     ERX.Keybinds.init();
     ERX.Input.init(canvas);
     ERX.Audio.init();

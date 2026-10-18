@@ -147,6 +147,15 @@
     _checkTyped(input) {
       const typed = input.typed;
       if (!typed) return;
+      // (shh)
+      if (typed.endsWith('theelementaladmin')) {
+        input.typed = '';
+        ERX.Admin.unlock();
+        ERX.Audio.playSfx('star');
+        ERX.Toast.show('ADMIN MODE UNLOCKED. With great power comes great testing.', { color: '#ff6a6a', duration: 4 });
+        ERX.Scenes.push('admin', {});
+        return;
+      }
       for (const w of ERX.Data.elementWords) {
         if (typed.endsWith(w)) {
           const replies = ERX.Data.elementWordReplies;

@@ -32,6 +32,10 @@
       for (const key of Object.keys(paths)) jobs.push(this.loadImage(key, paths[key]));
       // element title art (shown once, at the reveal)
       if (ERX.Elements) for (const e of ERX.Elements.list) if (e.art) jobs.push(this.loadImage('element_' + e.id, e.art));
+      // ultimate title art (the slam). Darkness has none: it gets a generated title.
+      if (ERX.Elements) for (const e of ERX.Elements.list) if (e.id !== 'darkness') jobs.push(this.loadImage('ult_' + e.id, 'assets/images/ults/' + e.id + '.png'));
+      // the AWAKENED Ultimate titles
+      if (ERX.Elements) for (const e of ERX.Elements.list) if (e.id !== 'darkness') jobs.push(this.loadImage('awk_' + e.id, 'assets/images/ults-awakened/' + e.id + '.png'));
       return Promise.all(jobs);
     },
 

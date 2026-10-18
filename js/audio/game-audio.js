@@ -173,6 +173,12 @@
       [392, 523, 659, 784, 1046].forEach((f, i) => a.tone(d, { wave: 'triangle', freq: f, t: t + i * 0.09, dur: 0.12, vol: 0.07, release: 0.2 }));
       a.noiseBurst(d, { t, dur: 0.6, vol: 0.04, type: 'highpass', freq: 4000, attack: 0.2, release: 0.4 });
     },
+    /** Achievement unlocked: a bright little fanfare. */
+    achievement(a, d, t) {
+      [784, 988, 1175, 1568].forEach((f, i) => a.tone(d, { wave: 'square', freq: f, t: t + i * 0.08, dur: 0.07, vol: 0.05, release: 0.08 }));
+      for (const f of [1568, 1976, 2349]) a.tone(d, { wave: 'triangle', freq: f, t: t + 0.34, dur: 0.5, vol: 0.04, attack: 0.01, release: 0.6 });
+      a.noiseBurst(d, { t: t + 0.34, dur: 0.05, vol: 0.06, type: 'highpass', freq: 6000, release: 0.5 });
+    },
     ding(a, d, t) {
       a.tone(d, { wave: 'sine', freq: 1318, t, dur: 0.01, vol: 0.09, attack: 0.002, release: 0.8 });
       a.tone(d, { wave: 'sine', freq: 1046, t: t + 0.25, dur: 0.01, vol: 0.09, attack: 0.002, release: 1.0 });
@@ -201,6 +207,36 @@
       a.tone(d, { wave: 'sine', freq: 1760, t, dur: 0.01, vol: 0.06, attack: 0.001, release: 0.35 });
       a.tone(d, { wave: 'sine', freq: 2637, t, dur: 0.01, vol: 0.04, attack: 0.001, release: 0.25 });
       a.noiseBurst(d, { t, dur: 0.02, vol: 0.06, type: 'highpass', freq: 4000, release: 0.03 });
+    },
+    /** Raising your guard: a short "fwump". */
+    guardUp(a, d, t) {
+      a.noiseBurst(d, { t, dur: 0.06, vol: 0.07, type: 'bandpass', freq: 900, release: 0.06 });
+      a.tone(d, { wave: 'triangle', freq: 220, freqEnd: 330, t, dur: 0.06, vol: 0.06, release: 0.05 });
+    },
+    /** A hit stopped by your block: a solid impact + your element's flavour (js/data/kits/guards.js). */
+    blockHit(a, d, t, o) {
+      const k = (o && o.kind) || 'plain';
+      a.tone(d, { wave: 'square', freq: 150, freqEnd: 70, t, dur: 0.07, vol: 0.09, release: 0.06 });
+      a.noiseBurst(d, { t, dur: 0.04, vol: 0.1, type: 'lowpass', freq: 1800, release: 0.05 });
+      const ring = (fs, vol, rel) => fs.forEach((f, i) => a.tone(d, { wave: 'sine', freq: f * rand(0.98, 1.02), t, dur: 0.01, vol: vol / (i + 1), attack: 0.001, release: rel / (i + 1) }));
+      switch (k) {
+        case 'clang': ring([520, 1247, 1980, 2890], 0.09, 0.5); break;
+        case 'glass': ring([1760, 2637, 3520], 0.06, 0.4); a.noiseBurst(d, { t, dur: 0.03, vol: 0.06, type: 'highpass', freq: 5000, release: 0.05 }); break;
+        case 'crackle': for (let i = 0; i < 6; i++) a.noiseBurst(d, { t: t + i * 0.025, dur: 0.01, vol: 0.06, type: 'highpass', freq: 2500 + i * 300, release: 0.02 }); a.noiseBurst(d, { t, dur: 0.15, vol: 0.05, type: 'bandpass', freq: 700, release: 0.1 }); break;
+        case 'splash': a.noiseBurst(d, { t, dur: 0.18, vol: 0.09, type: 'bandpass', freq: 1400, release: 0.15 }); a.tone(d, { wave: 'sine', freq: 600, freqEnd: 1200, t, dur: 0.08, vol: 0.05, release: 0.05 }); break;
+        case 'whoosh': a.noiseBurst(d, { t, dur: 0.2, vol: 0.08, type: 'bandpass', freq: 500, freqEnd: 1500, release: 0.15 }); break;
+        case 'thud': a.tone(d, { wave: 'sine', freq: 90, freqEnd: 40, t, dur: 0.16, vol: 0.18, release: 0.12 }); a.noiseBurst(d, { t, dur: 0.1, vol: 0.08, type: 'lowpass', freq: 600, release: 0.1 }); break;
+        case 'zap': a.tone(d, { wave: 'sawtooth', freq: 1400, freqEnd: 300, t, dur: 0.08, vol: 0.05, release: 0.04 }); a.noiseBurst(d, { t, dur: 0.06, vol: 0.06, type: 'highpass', freq: 3000, release: 0.05 }); break;
+        case 'chime': [1318, 1760, 2093].forEach((f, i) => a.tone(d, { wave: 'triangle', freq: f, t: t + i * 0.03, dur: 0.02, vol: 0.05, release: 0.35 })); break;
+        case 'wood': a.tone(d, { wave: 'triangle', freq: 320, freqEnd: 260, t, dur: 0.05, vol: 0.12, release: 0.08 }); a.tone(d, { wave: 'triangle', freq: 640, t, dur: 0.02, vol: 0.05, release: 0.06 }); break;
+        case 'squelch': a.tone(d, { wave: 'sine', freq: 300, freqEnd: 90, t, dur: 0.12, vol: 0.1, release: 0.08, vibrato: 40, vibratoRate: 30 }); a.noiseBurst(d, { t, dur: 0.1, vol: 0.06, type: 'lowpass', freq: 900, release: 0.08 }); break;
+        case 'bone': for (let i = 0; i < 3; i++) a.tone(d, { wave: 'square', freq: rand(900, 1300), t: t + i * 0.03, dur: 0.012, vol: 0.05, release: 0.03 }); break;
+        case 'tick': a.tone(d, { wave: 'square', freq: 2200, t, dur: 0.01, vol: 0.06, release: 0.02 }); a.tone(d, { wave: 'square', freq: 1600, t: t + 0.12, dur: 0.01, vol: 0.05, release: 0.02 }); break;
+        case 'boom': a.tone(d, { wave: 'sine', freq: 70, freqEnd: 45, t, dur: 0.25, vol: 0.2, release: 0.15 }); a.tone(d, { wave: 'square', freq: 140, t, dur: 0.05, vol: 0.05, release: 0.05 }); break;
+        case 'psi': a.tone(d, { wave: 'sine', freq: 880, freqEnd: 440, t, dur: 0.2, vol: 0.06, release: 0.1, vibrato: 60, vibratoRate: 14 }); break;
+        case 'glitch': for (let i = 0; i < 5; i++) a.tone(d, { wave: 'square', freq: rand(200, 2400), t: t + i * 0.02, dur: 0.02, vol: 0.04, release: 0.01 }); break;
+        default: ring([1760, 2637], 0.06, 0.3);
+      }
     },
     hurt(a, d, t) { a.tone(d, { wave: 'square', freq: 420, freqEnd: 140, t, dur: 0.16, vol: 0.06, release: 0.06 }); },
     wakePress(a, d, t, o) {

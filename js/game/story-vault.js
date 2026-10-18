@@ -113,12 +113,12 @@
     yield 2.6;
     g.rev.elem = 0;
     g.revealBurst();
-    sfx('guitarRiff');
+    const rar = ERX.Elements.rarityOf(el);
+    sfx('guitarRiff', { tier: rar.tier });   // every rarity has its own riff; Chaos's is ominous
     sfx('element_' + el.id);
     ERX.FX.shake(4, 0.4);
     yield 1.6;
     // ...and how rare it is
-    const rar = ERX.Elements.rarityOf(el);
     g.rev.rarity = 0;
     sfx('raritySting', { tier: rar.tier });
     if (rar.tier >= 4) { g.revealBurst(true); g.flashT = rar.tier >= 5 ? 0.6 : 0.3; ERX.FX.shake(rar.tier >= 5 ? 6 : 3, 0.5); }

@@ -3,6 +3,10 @@
  * swoop). Both share one base class with health, knockback, a hit flash,
  * contact damage and a death burst that awards XP.
  *
+ * Status effects (burn, chill, blind...) from element attacks live on every
+ * enemy: see applyStatus(). think(dt) should aim at this.target(), not the
+ * player directly, so blinded / confused monsters get it wrong.
+ *
  * Add a new monster: extend Enemy, implement think(dt) + sprite(), register
  * it in ENEMY_TYPES.
  */
@@ -15,6 +19,7 @@
   const sfx = (n, o) => ERX.Audio.playSfx(n, o);
   const INK = '#120c16';
   const cache = new Map();
+  let UID = 0;
 
   class Enemy {
     constructor(game, spawn) {
@@ -27,18 +32,25 @@
       this.flash = 0;
       this.hurtT = 0;
       this.t = Math.random() * 10;
+      this.uid = ++UID;
+      this.status = {};
     }
     get cx() { return this.x + this.w / 2; }
     get cy() { return this.y + this.h / 2; }
     get box() { return { x: this.x, y: this.y, w: this.w, h: this.h }; }
 
-    hurt(dmg, dir, crit) {
+    hurt(dmg, dir, crit, kb) {
       if (this.dead) return;
+      kb = kb === undefined ? 1 : kb;
+      dmg = Math.max(1, Math.round(dmg * this.vuln()));
+      if (this.status.sleep) delete this.status.sleep;     // a hit wakes you up
       this.hp -= dmg;
       this.flash = 1;
-      this.hurtT = 0.25;
-      this.vx = dir * (crit ? 170 : 120) * this.knockback;
-      this.vy = -120 * this.knockback;
+      this.hurtT = 0.25 * Math.min(1, kb + 0.3);
+      if (!this.stunned()) {
+        this.vx = dir * (crit ? 170 : 120) * this.knockback * kb;
+        if (kb > 0.3) this.vy = -120 * this.knockback * Math.min(1, kb);
+      }
       sfx('punchHit');
       sfx(this.hurtSfx, { minGap: 0.05 });
       this.game.floatText(this.cx, this.y - 6, (crit ? '-' + dmg + '!' : '-' + dmg), crit ? '#ffd34d' : '#ffffff');
@@ -59,22 +71,99 @@
       this.game.onEnemyKilled(this);
     }
 
-    /** Hurt the player on touch. */
+    /** Hurt the player on touch (blinded / stunned monsters miss). */
     contact() {
       const p = this.game.player;
-      if (this.hurtT > 0 || p.invulnT > 0 || p.intangible) return;
-      if (Physics.rectsOverlap(this.box, { x: p.x, y: p.y, w: p.w, h: p.h })) p.takeHit(this.damage, this.cx);
+      if (this.hurtT > 0 || p.invulnT > 0 || p.intangible || this.stunned() || this.isBlind()) return;
+      if (Physics.rectsOverlap(this.box, { x: p.x, y: p.y, w: p.w, h: p.h })) p.takeHit(this.damage, this.cx, this);
+    }
+
+    // ------------------------------------------------------------ status
+    _S(id) { return ERX.Abilities.STATUS[id]; }
+    stunned() { for (const id in this.status) if (this._S(id).stun) return true; return false; }
+    isBlind() { for (const id in this.status) if (this._S(id).blind) return true; return false; }
+    isConfused() { for (const id in this.status) if (this._S(id).confuse) return true; return false; }
+    slowMult() { let m = 1; for (const id in this.status) if (this._S(id).slow) m = Math.min(m, this._S(id).slow); return m; }
+    vuln() { let m = 1; for (const id in this.status) if (this._S(id).vuln) m *= this._S(id).vuln; return m; }
+
+    /** Inflict a status effect. potency 0..3 (skill tree) makes it last longer + hurt more. */
+    applyStatus(id, potency) {
+      const ST = ERX.Abilities.STATUS;
+      if (id === 'random') { const ks = Object.keys(ST).filter((k) => !['timestop', 'freeze', 'encase'].includes(k)); id = ks[Math.floor(Math.random() * ks.length)]; }
+      const S = ST[id];
+      if (!S || this.dead) return;
+      const k = 1 + 0.25 * (potency || 0);
+      if (S.launch && !this.immovable) { this.vy = -S.launch; this.onGround = false; }
+      const cur = this.status[id];
+      if (cur) { cur.t = Math.max(cur.t, S.dur * k); cur.stacks = Math.min(S.stacks || 1, cur.stacks + 1); cur.k = Math.max(cur.k, k); }
+      else {
+        this.status[id] = { t: S.dur * k, k, stacks: 1, tick: 0.5 };
+        this.game.floatText(this.cx, this.y - 16, S.name, S.color);
+      }
+      if (S.into && this.status[id].stacks >= S.stacks) {
+        delete this.status[id];
+        this.applyStatus(S.into, potency);
+        return;
+      }
+      if (S.stun) this.vx = 0;
+    }
+
+    _updateStatus(dt) {
+      for (const id of Object.keys(this.status)) {
+        const st = this.status[id], S = this._S(id);
+        st.t -= dt;
+        if (S.dps) {
+          st.tick -= dt;
+          if (st.tick <= 0) {
+            st.tick = 0.5;
+            const d = Math.max(1, Math.round(S.dps * 0.5 * st.k * st.stacks));
+            this.hp -= d;
+            this.flash = Math.max(this.flash, 0.4);
+            this.game.floatText(this.cx + U.lerp(-4, 4, Math.random()), this.y - 4, '-' + d, S.color);
+            if (this.onStatusDamage) this.onStatusDamage(d);
+            if (S.lifesteal) { const p = this.game.player; p.hp = Math.min(p.maxHp, p.hp + d * S.lifesteal); }
+            if (this.hp <= 0) { this.die(); return; }
+          }
+        }
+        if (S.fx && Math.random() < dt * 6 && ERX.Abilities) {
+          ERX.Abilities.puff(this.game, this.cx, this.cy, S.fx, { c: S.color, l: C.mix(S.color, '#ffffff', 0.5), d: C.shade(S.color, -0.4), core: '#ffffff', fx: S.fx }, 1, 0.7);
+        }
+        if (st.t <= 0) delete this.status[id];
+      }
+    }
+
+    /** Where this monster THINKS you are (blind: guessing, confused: backwards). */
+    target() {
+      const p = this.game.player;
+      if (this.isBlind()) {
+        const gx = this.cx + Math.sin(this.t * 0.9 + this.uid) * 70;
+        return { cx: gx, y: this.y, feet: this.y + this.h };
+      }
+      if (this.isConfused()) return { cx: this.cx * 2 - p.cx, y: p.y, feet: p.feet };
+      return p;
     }
 
     update(dt) {
       this.t += dt;
       this.flash = Math.max(0, this.flash - dt * 6);
       this.hurtT = Math.max(0, this.hurtT - dt);
-      this.think(dt);
+      this._updateStatus(dt);
+      if (this.dead) return;
+      if (this.stunned()) this.stunnedPhysics(dt);
+      else this.think(dt * this.slowMult());
       if (!this.dead) this.contact();
     }
 
+    /** Frozen / asleep / shocked: no thinking, just gravity. */
+    stunnedPhysics(dt) {
+      if (this.flying && !this.status.launch) return;
+      this.vx = U.approach(this.vx, 0, 400, dt);
+      this.vy = Math.min(this.vy + 900 * dt, 400);
+      Physics.move(this.game.level, this, dt);
+    }
+
     render(ctx, cam) {
+      if (this._erased) return;   // erased from existence for a moment (Void's Zero Point)
       const cv = this.sprite();
       const x = Math.round(this.cx - cv.width / 2) - cam.ix, y = Math.round(this.y + this.h - cv.height + this.drawOffset) - cam.iy;
       ctx.drawImage(cv, x, y);
@@ -82,6 +171,16 @@
         ctx.globalAlpha = this.flash;
         ctx.drawImage(whiteOf(cv), x, y);
         ctx.globalAlpha = 1;
+      }
+      // status: tint (frozen...), a row of coloured pips, stars when stunned
+      const ids = Object.keys(this.status);
+      if (ids.length) {
+        for (const id of ids) {
+          const S = this._S(id);
+          if (S.tint) { ctx.globalAlpha = 0.55; ctx.drawImage(ERX.Sprites.tint(cv, S.tint), x, y); ctx.globalAlpha = 1; }
+        }
+        ids.slice(0, 5).forEach((id, i) => { ctx.fillStyle = INK; ctx.fillRect(x + i * 4 - 1, y - 9, 4, 4); ctx.fillStyle = this._S(id).color; ctx.fillRect(x + i * 4, y - 8, 2, 2); });
+        if (this.stunned()) for (let i = 0; i < 3; i++) { const a = this.t * 6 + i * 2.1; ctx.fillStyle = '#ffd34d'; ctx.fillRect(Math.round(this.cx + Math.cos(a) * 6) - cam.ix, Math.round(this.y - 3 + Math.sin(a) * 2) - cam.iy, 1, 1); }
       }
       // tiny health bar once damaged
       if (this.hp < this.maxHp) {
@@ -153,7 +252,7 @@
       this.dieSfx = 'slimeDie';
     }
     think(dt) {
-      const p = this.game.player;
+      const p = this.target();
       const dx = p.cx - this.cx, dy = p.feet - (this.y + this.h);
       const aggro = Math.abs(dx) < 150 && Math.abs(dy) < 70;
       if (this.onGround) {
@@ -236,6 +335,7 @@
       this.state = 'hang';
       this.modeT = 0;
       this.drawOffset = 0;
+      this.flying = true;
       this.hurtSfx = 'batHurt';
       this.dieSfx = 'batDie';
     }
@@ -251,7 +351,7 @@
       return false;
     }
     think(dt) {
-      const p = this.game.player;
+      const p = this.target();
       const dx = p.cx - this.cx, dy = (p.y + 6) - this.cy;
       if (this.state === 'hang') {
         if (Math.abs(dx) < 120 && dy > 0 && dy < 200) { this.state = 'fly'; this.modeT = 0; sfx('batScreech', { minGap: 0.3 }); }
@@ -294,6 +394,14 @@
   const ENEMY_TYPES = { slime: Slime, bat: Bat };
   ERX.Enemies = {
     Enemy, Slime, Bat, TYPES: ENEMY_TYPES,
-    create(game, spawn) { const T = ENEMY_TYPES[spawn.type]; return T ? new T(game, spawn) : null; },
+    create(game, spawn) {
+      const T = ENEMY_TYPES[spawn.type];
+      if (!T) return null;
+      const e = new T(game, spawn);
+      // carrying Chaos? The monsters push back harder (js/game/chaos-world.js)
+      const d = ERX.ChaosWorld && spawn.type !== 'dummy' ? ERX.ChaosWorld.difficulty(game) : null;
+      if (d && d.hp !== 1) { e.maxHp = Math.round(e.maxHp * d.hp); e.hp = e.maxHp; if (e.damage) e.damage = Math.round(e.damage * d.damage); }
+      return e;
+    },
   };
 })(window.ERX = window.ERX || {});

@@ -23,6 +23,14 @@
     { id: 'zoomIn', label: 'Zoom In', defaults: ['Equal', 'WheelUp'] },
     { id: 'zoomOut', label: 'Zoom Out', defaults: ['Minus', 'WheelDown'] },
     { id: 'skills', label: 'Skill Tree', defaults: ['KeyT', null] },
+    { id: 'ability1', label: 'Ability 1', defaults: ['KeyQ', 'Digit1'] },
+    { id: 'ability2', label: 'Ability 2', defaults: ['KeyR', 'Digit2'] },
+    { id: 'ability3', label: 'Ability 3', defaults: ['KeyC', 'Digit3'] },
+    { id: 'ability4', label: 'Ability 4', defaults: ['KeyX', 'Digit4'] },
+    { id: 'ability5', label: 'Ability 5', defaults: ['KeyZ', 'Digit5'] },
+    { id: 'ultimate', label: 'Ultimate', defaults: ['KeyV', 'Digit6'] },
+    { id: 'awaken', label: 'Awaken', defaults: ['KeyG', 'Digit7'] },
+    { id: 'aimDown', label: 'Aim Down', defaults: ['KeyS', 'ArrowDown'] },
   ];
 
   // Inputs that can never be bound (ESC is the universal back/pause key).

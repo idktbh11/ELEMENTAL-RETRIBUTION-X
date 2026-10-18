@@ -21,6 +21,14 @@
       this.canvas = canvas;
       this.ctx = canvas.getContext('2d', { alpha: false });
       window.addEventListener('resize', () => this.resize());
+      // pixel density can change without a resize (dragging the window to
+      // another monitor, browser zoom, phone emulation): re-fit then too
+      const watchDpr = () => {
+        if (!window.matchMedia) return;
+        const mq = window.matchMedia('(resolution: ' + (window.devicePixelRatio || 1) + 'dppx)');
+        if (mq.addEventListener) mq.addEventListener('change', () => { this.resize(); watchDpr(); }, { once: true });
+      };
+      watchDpr();
       document.addEventListener('fullscreenchange', () => {
         this.resize();
         ERX.Events.emit('display:fullscreen', this.isFullscreen());

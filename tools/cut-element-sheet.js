@@ -2,8 +2,10 @@
  * Cuts the element-name sheet into one native-resolution pixel-art PNG per
  * element, removing the blurry glow halos behind the labels.
  *
- *   node tools/cut-element-sheet.js <sheet.png>
+ *   node tools/cut-element-sheet.js <sheet.png>            element names
  *   -> assets/images/elements/<id>.png  + assets/images/elements/_preview.png
+ *   node tools/cut-element-sheet.js <sheet.png> --ults     ultimate titles
+ *   -> assets/images/ults/<id>.png      (same 5x6 layout + element order)
  *
  * Steps:
  *   1. shrink the whole sheet to the art's pixel grid ("most common colour")
@@ -26,13 +28,15 @@ const ORDER = [
   'crystal', 'moon', 'solar', 'magnetism', 'time',
   'gravity', 'sound', 'mist', 'spirit', 'chaos',
 ];
-const PIXEL = 4.5;                                   // source px per art px
+let PIXEL = 4.5;                                     // source px per art px
 const COL_CENTERS = [155, 460, 765, 1060, 1370];      // label centres on the sheet
 const ROW_CENTERS = [125, 300, 480, 650, 815, 950];
 const DARK = 78;                                     // outline luminance threshold
 
+const ULTS = process.argv.includes('--ults');
+if (ULTS) { PIXEL = 3; COL_CENTERS.splice(0, 5, 160, 460, 770, 1075, 1385); ROW_CENTERS.splice(0, 6, 130, 310, 490, 660, 815, 955); }
 const src = decode(process.argv[2]);
-const outDir = path.join(__dirname, '..', 'assets', 'images', 'elements');
+const outDir = path.join(__dirname, '..', 'assets', 'images', ULTS ? 'ults' : 'elements');
 fs.mkdirSync(outDir, { recursive: true });
 const lum = (r, g, b) => 0.299 * r + 0.587 * g + 0.114 * b;
 
@@ -59,6 +63,8 @@ for (let ty = 0; ty < H; ty++) for (let tx = 0; tx < W; tx++) {
 // ---- 2. flood-fill the background (4-way) ----
 const solid = (i) => img[i * 4 + 3] === 255;
 const dark = (i) => solid(i) && lum(img[i * 4], img[i * 4 + 1], img[i * 4 + 2]) < DARK;
+// ult sheet: only the pale, colourless checkerboard counts as background
+const bgLike = (i) => { if (!solid(i)) return true; const r = img[i * 4], g = img[i * 4 + 1], b = img[i * 4 + 2]; return lum(r, g, b) > 222 && Math.max(r, g, b) - Math.min(r, g, b) < 12; };
 const bg = new Uint8Array(W * H);
 const stack = [];
 for (let x = 0; x < W; x++) stack.push(x, 0, x, H - 1);
@@ -67,7 +73,7 @@ while (stack.length) {
   const y = stack.pop(), x = stack.pop();
   if (x < 0 || y < 0 || x >= W || y >= H) continue;
   const i = y * W + x;
-  if (bg[i] || dark(i)) continue;
+  if (bg[i] || (ULTS ? !bgLike(i) : dark(i))) continue;
   bg[i] = 1;
   stack.push(x + 1, y, x - 1, y, x, y + 1, x, y - 1);
 }
@@ -97,14 +103,28 @@ for (let i = 0; i < W * H; i++) {
   shapes.push({ pix, cx: (sx / pix.length) * PIXEL, cy: (sy / pix.length) * PIXEL });
 }
 const groups = ORDER.map(() => []);
-for (const s of shapes) {
-  if (s.pix.length < 2) continue; // stray specks
+const nearestLabel = (x, y) => {
   let best = 0, bd = Infinity;
   ORDER.forEach((_, k) => {
-    const dx = (s.cx - COL_CENTERS[k % 5]) / 300, dy = (s.cy - ROW_CENTERS[Math.floor(k / 5)]) / 150;
+    const dx = (x - COL_CENTERS[k % 5]) / 300, dy = (y - ROW_CENTERS[Math.floor(k / 5)]) / 150;
     const d = dx * dx + dy * dy;
     if (d < bd) { bd = d; best = k; }
   });
+  return { best, bd };
+};
+for (const s of shapes) {
+  if (s.pix.length < 2) continue; // stray specks
+  // two labels touching on the sheet -> split that shape pixel by pixel
+  const votes = new Map();
+  for (const j of s.pix) { const k = nearestLabel((j % W) * PIXEL, ((j / W) | 0) * PIXEL).best; votes.set(k, (votes.get(k) || 0) + 1); }
+  const big = [...votes.values()].filter((n) => n > s.pix.length * 0.15).length;
+  if (big > 1) {
+    const parts = new Map();
+    for (const j of s.pix) { const k = nearestLabel((j % W) * PIXEL, ((j / W) | 0) * PIXEL).best; if (!parts.has(k)) parts.set(k, []); parts.get(k).push(j); }
+    for (const [k, pix] of parts) groups[k].push({ pix });
+    continue;
+  }
+  const { best, bd } = nearestLabel(s.cx, s.cy);
   if (bd < 1) groups[best].push(s);
 }
 
@@ -124,7 +144,7 @@ ORDER.forEach((id, k) => {
 });
 
 // ---- preview sheet (x4) on a checkerboard, for eyeballing the cut ----
-const S = 4, CW = 84, CH = 52, PW = CW * S, PH = CH * S;
+const S = ULTS ? 1 : 4, CW = ULTS ? 200 : 84, CH = ULTS ? 150 : 52, PW = CW * S, PH = CH * S;
 const pv = Buffer.alloc(PW * 5 * PH * 6 * 4);
 previews.forEach(({ tw, th, out }, i) => {
   const ox = (i % 5) * PW, oy = Math.floor(i / 5) * PH;

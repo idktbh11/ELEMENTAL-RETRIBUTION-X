@@ -183,6 +183,7 @@ function check(name, ok, detail) {
     check('spending the point learns VITALITY 1 (+10 max HP)', await ev(`${G}.character.skills.vitality === 1 && ${G}.player.maxHp === 110 && ${G}.character.skillPoints === 0`));
     await b.key('Escape');
     await waitFor("ERX.Scenes.top().id === 'game'", 2000);
+    await waitFor(`!${G}.objective || ${G}.objective.doneT > 0 || !/SKILL/.test(${G}.objective.label)`, 3000);   // let the SKILL task finish first
     check('final choice: Bet / What if I die', (await advance()) === 'choose' && /die/.test(await ev(`${G}.dialogue.choices[1]`)));
     await pick(1);
     let sawStone = false, sawGame = false;
@@ -198,6 +199,11 @@ function check(name, ok, detail) {
     await advance(30);
     check('the gates open', await waitFor(`${G}.gates.left.target === 0 && ${G}.gates.right.target === 0`, 6000));
     await advance(10);
+    check('finishing the tutorial unlocks an achievement', await ev("ERX.Achievements.has('tutorial')"));
+    check('...with an ACHIEVEMENT UNLOCKED banner', await ev("ERX.Achievements.popups.length > 0 && ERX.Achievements.popups[0].a.id === 'tutorial'"));
+    await sleep(600);
+    await shot('12b-achievement');
+    check('...only once', await ev("ERX.Achievements.unlock('tutorial') === false && ERX.Achievements.popups.length === 1"));
     check('progress is saved after the tutorial', await waitFor("ERX.Saves.characters[0].progress.stage === 'tutorialDone'", 4000));
     check('the "go fight enemies" objective shows', await waitFor(`!!${G}.objective && /ENEMIES/.test(${G}.objective.label)`, 3000));
     check('upbeat music after the gates open', await ev("ERX.Audio.music.wanted === 'onward'"));
@@ -364,6 +370,8 @@ function check(name, ok, detail) {
     const el = await ev("ERX.Saves.characters[0].element || null");
     check('an element is assigned (at random) at the reveal', !!el && (await ev(`!!ERX.Elements.get('${el}')`)), el);
     check('progress saved (awakened)', (await ev('ERX.Saves.characters[0].progress.stage')) === 'awakened');
+    check('getting your element is a fresh start: no XP, levels, skill points, stats or gold from the tutorial', await ev("(() => { const c = ERX.Saves.characters[0]; return c.level === 1 && !c.xp && c.skillPoints === 0 && Object.keys(c.elementSkills || {}).length === 0 && Object.values(c.skills).every(v => v === 0) && c.gold === 0; })()"), await ev("JSON.stringify(ERX.Saves.characters[0])"));
+    check('...and the player really is back at level 1', await ev(`${G}.player.level === 1 && ${G}.player.xp === 0 && ${G}.player.hp === ${G}.player.maxHp`));
     await sleep(2500);
     check('5 seconds of nothing first', await ev(`${G}.rev.you === null`));
     check('"YOU" appears', await waitFor(`${G}.rev.you !== null`, 4000));
@@ -376,6 +384,12 @@ function check(name, ok, detail) {
     await shot('23-you-got');
     check('...then how rare it is', await waitFor(`${G}.rev.rarity !== null`, 3000));
     check('every rarity tier has a sting', await ev("typeof ERX.SfxBank.raritySting === 'function'"));
+    check('every rarity tier has its OWN guitar riff', await ev(`(() => {
+      const node = () => ({ connect() {}, disconnect() {}, frequency: {}, gain: {} });
+      const sig = (tier) => { const log = []; const a = { ctx: { createWaveShaper: node, createBiquadFilter: node, createGain: node }, tone: (d, o) => log.push(o.wave + Math.round(o.freq)), noiseBurst: () => log.push('n') }; ERX.SfxBank.guitarRiff(a, {}, 0, { tier }); return log.join(','); };
+      const all = [0, 1, 2, 3, 4, 5].map(sig);
+      return new Set(all).size === 6 && all.every((x) => x.length > 20);
+    })()`));
     await sleep(1200);
     await shot('23b-rarity');
     console.log('[the void]');
@@ -440,6 +454,9 @@ function check(name, ok, detail) {
     check('the Julforic Pillars + the Unknown Being (nobody knows who)', said(/JULFORIC PILLARS/) && said(/don't even know who it is/));
     check('"What type of tutorial guide are you?" -> he can\'t just use any element, he\'s like you', said(/I'm just like you/));
     check('seven locked worlds appear', !!worldsWhenShown && worldsWhenShown.length === 7 && worldsWhenShown.every((u) => !u));
+    check('world 1 always looks normal (the same planet for every element)', await ev("(() => { const a = ERX.Worlds.build(ERX.Elements.get('fire')), b = ERX.Worlds.build(ERX.Elements.get('chaos')); return a[0].surface === 'earthlike' && JSON.stringify(a[0].spec) === JSON.stringify(b[0].spec); })()"));
+    check('the other worlds match the element (fire burns, ice freezes, water floods...)', await ev("(() => { const f = ERX.Worlds.build(ERX.Elements.get('fire')).slice(1), i = ERX.Worlds.build(ERX.Elements.get('ice')).slice(1), w = ERX.Worlds.build(ERX.Elements.get('water')).slice(1); return f.some(x => x.surface === 'lava') && i.some(x => x.surface === 'ice') && w.some(x => x.surface === 'ocean'); })()"));
+    check('every element has its own world style, and its 6 worlds all look different', await ev("ERX.Elements.list.every(el => { const ws = ERX.Worlds.build(el).slice(1); return new Set(ws.map(w => JSON.stringify([w.spec.feat, w.spec.base, w.spec.extra]))).size === 6; })"));
     check('the worlds depend on your element', await ev("(() => { const a = ERX.Worlds.build(ERX.Elements.get('fire')), b = ERX.Worlds.build(ERX.Elements.get('ice')); return a.length === 7 && a.some((w, i) => w.surface !== b[i].surface); })()") && said(/depend on what element you have/));
     check('you ask how many elements there are: he doesn\'t know', said(new RegExp(await ev(`${G}.character.name.toUpperCase()`) + '\\|How many elements are there')) && said(/^say\|THE VOICE\|I don't know\.$/));
     check('he shoots an energy key at the first world\'s lock', sawKey || (await ev(`!!${G}.energyKey && ${G}.energyKey.done && !!${G}.energyKey.from`)));
@@ -541,16 +558,67 @@ function check(name, ok, detail) {
     check('the roll is weighted (commons common, mythic very rare)', dist.common > dist.uncommon && dist.uncommon > dist.rare && dist.rare > dist.epic && dist.epic > dist.legendary && (dist.mythic || 0) < dist.legendary && (dist.mythic || 0) < 600, dist);
     check('nobody chose it: no element setting exists', await ev("!JSON.stringify(ERX.Settings.data).match(/element/i)"));
 
-    console.log('[restart = full reset]');
+    console.log('[restart]');
     await waitFor(`!ERX.Scenes.busy`, 3000);
     await b.key('Escape');
     check('pause opens', await waitFor("ERX.Scenes.top().id === 'pause'", 2000));
+    check('...but there is no RESTART once you have your element', await ev("!ERX.Scenes.top().buttons.some(x => x.label === 'RESTART')"));
+    await b.key('Escape');
+    await waitFor("ERX.Scenes.top().id === 'game' && !ERX.Scenes.busy", 2000);
+    // during the tutorial you can still restart, and it wipes everything
+    await ev(`(() => { const s = ERX.Scenes.stack; while (s.length > 1) s.pop().exit(); const c = ERX.Saves.characters[0]; c.progress = { stage: 'tutorialDone' }; c.level = 3; c.xp = 5; c.skillPoints = 2; c.gold = 7; delete c.element; ERX.Saves.update(c); ERX.Scenes.push('game', { character: c }); return true; })()`);
+    await waitFor(`ERX.Scenes.top().id === 'game' && !ERX.Scenes.busy`, 3000);
+    await sleep(300);
+    await b.key('Escape');
+    check('in the tutorial, pause still has RESTART', await waitFor("ERX.Scenes.top().id === 'pause' && ERX.Scenes.top().buttons.some(x => x.label === 'RESTART')", 2000));
     await ev("(() => { const p = ERX.Scenes.top(); p.buttons.find(x => x.label === 'RESTART').onActivate(); return true; })()");
     check('restart asks first', await waitFor("ERX.Scenes.top().id === 'confirm'", 2000));
     await ev("ERX.Scenes.top().p.onYes(); true");
     check('restart lands back in the cave', await waitFor(`ERX.Scenes.top().id === 'game' && ${G}.levelId === 'cave' && !ERX.Scenes.busy`, 5000));
-    check('restart wipes all progress (stage, level, xp, skills, element, gold, armor)', await ev("(() => { const c = ERX.Saves.characters[0]; return c.progress.stage === 'new' && c.level === 1 && !c.xp && c.skillPoints === 0 && Object.values(c.skills).every(v => v === 0) && !('element' in c) && c.gold === 0 && c.armor === null && c.armorOwned.length === 0; })()"), await ev("JSON.stringify(ERX.Saves.characters[0])"));
+    check('restart wipes all progress (stage, level, xp, skills, gold, armor)', await ev("(() => { const c = ERX.Saves.characters[0]; return c.progress.stage === 'new' && c.level === 1 && !c.xp && c.skillPoints === 0 && Object.values(c.skills).every(v => v === 0) && !('element' in c) && c.gold === 0 && c.armor === null && c.armorOwned.length === 0; })()"), await ev("JSON.stringify(ERX.Saves.characters[0])"));
     check('...and it stays wiped after a reload', await ev("(() => { ERX.Saves.load(); const c = ERX.Saves.characters[0]; return c.progress.stage === 'new' && !('element' in c); })()"));
+
+    check('...but achievements are forever', await ev("ERX.Achievements.has('tutorial')"));
+
+    console.log('[a new character: the Voice remembers]');
+    // a brand-new character on a device that has already beaten the tutorial
+    const toArena = async (name) => {
+      await ev(`(() => { const s = ERX.Scenes.stack; while (s.length > 1) s.pop().exit(); const c = ERX.Saves.create('${name}', ERX.Saves.randomLook()); ERX.Scenes.push('game', { character: c }); return true; })()`);
+      await waitFor(`ERX.Scenes.top().id === 'game' && ${G}.character.name === '${name}'`, 3000);
+      await ev(`(() => { const g = ${G}; g.state = 'play'; g.lids = 1; g.player.lying = false; g.player.controls = true; g.player.placeAt(g.level.arena.triggerX + 8, g.level.arena.floorY); return true; })()`);
+      await waitFor(`!!${G}.script`, 3000);
+    };
+    const talkUntilChoice = async () => {
+      const seen = [];
+      for (let k = 0; k < 500; k++) {   // (the fake-boss build-up alone takes ~12 s)
+        const st = await ev(`(() => { const d = ${G}.dialogue; return d.active ? d.mode + '|' + (d.mode === 'say' ? d.plain : d.choices.join(' / ')) : 'busy'; })()`);
+        if (st !== 'busy' && seen[seen.length - 1] !== st) seen.push(st);
+        if (st.startsWith('choose|')) return seen;
+        if (st.startsWith('say|') && !/ h-$/.test(st)) await b.key('Enter', { wait: 30 });
+        await sleep(120);
+      }
+      return seen;
+    };
+    await toArena('Twin');
+    let seenR = await talkUntilChoice();
+    check('mid-sentence, the Voice cuts himself off...', seenR.some((x) => /how did you even get in h-$/.test(x)));
+    check('...recognises you: "Have I seen you before?"', seenR.some((x) => /Have I seen you before\?/.test(x)));
+    await shot('40-recognised');
+    check('tutorial again, or skip to the elevator?', /^choose\|Go through the tutorial again\. \/ Skip it\. Take me to the elevator\.$/.test(seenR[seenR.length - 1]), seenR[seenR.length - 1]);
+    await b.key('ArrowDown', { wait: 40 });
+    await sleep(280);
+    await b.key('Enter', { wait: 40 });
+    for (let k = 0; k < 40 && (await ev(`${G}.levelId`)) === 'cave'; k++) { if (await ev(`${G}.dialogue.active`)) await b.key('Enter', { wait: 30 }); await sleep(150); }
+    check('skip -> straight to the Deep Ends elevator', await waitFor(`${G}.levelId === 'deep' && !ERX.Scenes.busy`, 6000) && await ev(`Math.abs(${G}.player.cx - ${G}.level.elevator.x0) < 60`));
+    check('...with the skill point the tutorial would have given you', await ev(`${G}.character.skillPoints === 1`));
+    check('...and it is saved (resumes near the elevator)', await ev(`${G}.character.progress.stage === 'reachedEnd'`));
+    await sleep(500);
+    check('...and the elevator works', await ev(`!!${G}.prompt && /ELEVATOR/.test(${G}.prompt.text)`) || await ev(`(() => { const g = ${G}; const E = g.level.elevator; g.player.placeAt(E.x, E.floorY); return true; })()`) && await waitFor(`!!${G}.prompt && /ELEVATOR/.test(${G}.prompt.text)`, 1500));
+    await toArena('Triplet');
+    seenR = await talkUntilChoice();
+    await sleep(280);
+    await b.key('Enter', { wait: 40 });
+    check('"tutorial again" -> the tutorial, from the top', await waitFor(`!!${G}.objective && /WALK/.test(${G}.objective.label)`, 8000) || (await (async () => { for (let k = 0; k < 20; k++) { if (await ev(`${G}.dialogue.active`)) await b.key('Enter', { wait: 30 }); await sleep(150); } return ev(`!!${G}.objective && /WALK/.test(${G}.objective.label)`); })()));
 
     check('no console errors', b.errors.length === 0, b.errors);
   } catch (e) {

@@ -101,7 +101,9 @@
     const m = MINERS[npc.id];
     if (m.talk) { yield* m.talk(g, npc); return; }
     npc.talkIndex = npc.talkIndex || 0;
-    const set = m.lines[npc.talkIndex % m.lines.length];
+    // people talk to you differently when you're carrying Chaos
+    const el = g.element && g.element(), lines = el && el.id === 'chaos' && m.chaosLines ? m.chaosLines : m.lines;
+    const set = lines[npc.talkIndex % lines.length];
     npc.talkIndex++;
     const speaker = m.speaker || { name: m.name, color: m.color || '#ffd36a', plate: '#4a3a1a', voice: 'npc', pitch: m.pitch, speed: 44 };
     npc.talking = true;

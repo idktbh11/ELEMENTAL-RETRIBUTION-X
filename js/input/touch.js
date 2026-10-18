@@ -20,6 +20,7 @@
   const LABELS = {
     moveLeft: '←', moveRight: '→', jump: 'JUMP', attack: 'HIT', block: 'BLOCK',
     dash: 'DASH', use: 'USE', inventory: 'BAG', skills: 'SKILLS', zoomIn: '+', zoomOut: '-',
+    ability1: '1', ability2: '2', ability3: '3', ability4: '4', ability5: '5', ultimate: 'ULT', awaken: 'AWK',
   };
 
   const Touch = {
@@ -89,7 +90,7 @@
       if (!this.enabled || ERX.Scenes.busy) return false;
       const top = ERX.Scenes.top();
       if (!top || top.id !== 'game') return false;
-      return top.state === 'play' && !top.dialogue.active;
+      return top.state === 'play' && !top.dialogue.active && !top.cine;
     },
 
     // ------------------------------------------------------------- layout
@@ -115,17 +116,27 @@
         { id: 'pad', x: L + 46, y: B - 26, r: 34, wide: true },
         { id: 'jump', action: 'jump', x: R - 28, y: B - 28, r: 24 },
         { id: 'attack', action: 'attack', x: R - 82, y: B - 18, r: 19 },
-        { id: 'dash', action: 'dash', x: R - 30, y: B - 84, r: 17 },
+        { id: 'dash', action: 'dash', x: R - 28, y: B - 80, r: 16 },
         { id: 'block', action: 'block', x: R - 130, y: B - 16, r: 16 },
-        { id: 'use', action: 'use', x: R - 80, y: B - 70, r: 15 },
+        { id: 'use', action: 'use', x: R - 84, y: B - 64, r: 14 },
+        { id: 'ability1', action: 'ability1', x: R - 170, y: B - 16, r: 13, element: true, slot: 's1' },
+        { id: 'ability2', action: 'ability2', x: R - 166, y: B - 48, r: 13, element: true, slot: 's2' },
+        { id: 'ability3', action: 'ability3', x: R - 146, y: B - 78, r: 13, element: true, slot: 's3' },
+        { id: 'ability4', action: 'ability4', x: R - 116, y: B - 100, r: 13, element: true, slot: 's4' },
+        { id: 'ability5', action: 'ability5', x: R - 80, y: B - 112, r: 13, element: true, slot: 's5' },
+        { id: 'ultimate', action: 'ultimate', x: R - 40, y: B - 124, r: 15, element: true, slot: 'ult' },
+        { id: 'awaken', action: 'awaken', x: R - 40, y: B - 160, r: 12, element: true, slot: 'awk' },
         { id: 'pause', x: W - 14 - ins.r, y: 14, r: 10 },
         { id: 'inventory', action: 'inventory', x: W - 40 - ins.r, y: 14, r: 10 },
         { id: 'skills', action: 'skills', x: W - 66 - ins.r, y: 14, r: 10 },
       ];
     },
+    _hasElement() { const g = ERX.Scenes.top(); return !!(g && g.player && g.player.kit && g.player.kit()); },
     _hit(x, y) {
       let best = null, bd = Infinity;
+      const el = this._hasElement();
       for (const b of this.buttons) {
+        if (b.element && !el) continue;
         const dx = (x - b.x) / (b.wide ? 1.5 : 1), dy = y - b.y;
         const d = Math.sqrt(dx * dx + dy * dy);
         if (d < b.r + 8 && d - b.r < bd) { best = b; bd = d - b.r; }
@@ -144,7 +155,10 @@
         return;
       }
       const g = ERX.Scenes.top();
+      const hasEl = this._hasElement();
       for (const b of this.buttons) {
+        if (b.element && !hasEl) continue;
+        if (b.element) { this._renderAbility(ctx, b, g); continue; }
         const held = b.id === 'pad' ? false : b.action ? this.down.has(b.action) : false;
         const glow = b.id === 'use' && !!g.prompt;
         if (b.id === 'pad') { this._renderPad(ctx, b); continue; }
@@ -152,6 +166,44 @@
         const text = b.id === 'pause' ? 'II' : b.id === 'skills' ? '★' : LABELS[b.action];
         F().draw(ctx, text, Math.round(b.x), Math.round(b.y - 3), { color: held ? '#120c1a' : glow ? '#ffd34d' : '#ffffff', align: 'center', alpha: held ? 1 : 0.85 });
       }
+    },
+    /** An ability button: the move's symbol + its cooldown; ULT = your element's symbol filling with energy. */
+    _renderAbility(ctx, b, g) {
+      if (b.slot === 'awk') { this._renderAwaken(ctx, b, g); return; }
+      const ab = g.player.ab, r = ab.ready(b.slot), held = this.down.has(b.action), el = g.element(), t = g.t, Sy = ERX.Symbols;
+      const ult = b.slot === 'ult', full = ult && ab.ult >= 100;
+      this._circle(ctx, b.x, b.y, b.r, held, full && r === 'ok');
+      ctx.save();
+      if (ult && ab.ult > 0) {
+        // the energy filling the button
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.r - 1, 0, Math.PI * 2); ctx.clip();
+        ctx.globalAlpha = full ? 0.5 + 0.15 * Math.sin(t * 6) : 0.4;
+        ctx.fillStyle = el.color;
+        const h = Math.round(2 * b.r * Math.min(1, ab.ult / 100));
+        ctx.fillRect(b.x - b.r, b.y + b.r - h, b.r * 2, h);
+      } else if (!ult && ab.cd[b.slot] > 0) {
+        const kit = g.player.kit(), k = ab.cd[b.slot] / ERX.Abilities.stats(kit, b.slot).cd;
+        ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.arc(b.x, b.y, b.r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k); ctx.closePath();
+        ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fill();
+      }
+      ctx.restore();
+      const dim = r === 'locked', ak = g.player.awk && g.player.awk(), col = ak ? ak.color : null;
+      if (ult) Sy.element(ctx, el.id, b.x, b.y, 2, { dim, glow: full && !dim ? 0.55 + 0.45 * Math.sin(t * 7) : 0, t, color: col });
+      else Sy.move(ctx, el.id, b.slot, b.x, b.y, 2, { dim, t, awakened: !!ak, color: col });
+      if (r === 'mana') { ctx.save(); ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.strokeStyle = '#3a8aff'; ctx.stroke(); ctx.restore(); }
+    },
+    /** The AWAKEN button: a ring that fills as you fight; glows when you can awaken. */
+    _renderAwaken(ctx, b, g) {
+      const p = g.player, ab = p.ab, el = g.element(), kit = ERX.Awakening.kit(el.id);
+      if (!kit) return;
+      const ak = ab.awakened(), ready = !ak && ab.awk >= 100, held = this.down.has(b.action), t = g.t;
+      this._circle(ctx, b.x, b.y, b.r, held, ready);
+      const frac = ak ? ab.awakenT / ERX.Awakening.TIME : ab.awk / 100;
+      ctx.save();
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r - 1, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac);
+      ctx.strokeStyle = kit.color; ctx.lineWidth = 2; ctx.globalAlpha = ready || ak ? 0.75 + 0.25 * Math.sin(t * 8) : 0.6; ctx.stroke();
+      ctx.restore();
+      ERX.Symbols.element(ctx, el.id, b.x, b.y, 1, { dim: !ready && !ak, color: kit.color, glow: ready ? 0.6 + 0.4 * Math.sin(t * 7) : 0, t });
     },
     _circle(ctx, x, y, r, held, glow) {
       x = Math.round(x); y = Math.round(y);
@@ -195,6 +247,7 @@
     _maybeFullscreen() {
       if (this.fullscreenTried) return;
       this.fullscreenTried = true;
+      if (/Electron/.test(navigator.userAgent)) return;   // the desktop app has its own window (F11)
       try {
         const el = document.documentElement;
         if (!document.fullscreenElement && el.requestFullscreen) {

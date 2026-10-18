@@ -1,5 +1,6 @@
 /*
- * In-game menus: PAUSE, SKILL TREE, INVENTORY and the end-of-content panel.
+ * In-game menus: PAUSE, INVENTORY and the end-of-content panel.
+ * (The skill tree is js/screens/skill-tree.js.)
  */
 (function (ERX) {
   'use strict';
@@ -23,6 +24,9 @@
         b('RESTART', 'reset', () => this._restart()),
         b('QUIT TO MENU', 'back', () => this._quit()),
       ];
+      // no restarting once you have your element: there's no going back
+      if (this.game.awakened && this.game.awakened()) { this.buttons.splice(4, 1); this.maxH -= 24; }
+      if (ERX.Admin.on()) { this.buttons.splice(this.buttons.length - 1, 0, b('ADMIN', 'gear', () => ERX.Scenes.push('admin', { game: this.game }))); this.maxH += 24; }
       this.group = new FocusGroup();
       this.group.set(this.buttons);
     }
@@ -37,6 +41,7 @@
           c.level = 1;
           c.xp = 0;
           c.skills = { vitality: 0, focus: 0, agility: 0 };
+          c.elementSkills = {};
           c.skillPoints = 0;
           c.gold = 0;
           c.armor = null;
@@ -76,148 +81,6 @@
       T.drawTitlePlate(ctx, p.x + p.w / 2, p.y - 10, 'PAUSED');
       this.buttons.forEach((b, i) => b.setRect(p.x + 18, p.y + 20 + i * 24, p.w - 36, 18));
       this.group.render(ctx);
-    }
-  }
-
-  // =========================================================== SKILL TREE
-  const BRANCHES = [
-    { id: 'vitality', name: 'VITALITY', color: '#e0403a', icon: '♥', per: '+10 MAX HP', desc: ['Tougher skin.', 'Even tougher skin.', 'Basically a rock now.'] },
-    { id: 'focus', name: 'FOCUS', color: '#3a8aff', icon: '★', per: '+5 MAX MP', desc: ['Think harder.', 'Think even harder.', 'Big brain energy.'] },
-    { id: 'agility', name: 'AGILITY', color: '#72e05a', icon: '→', per: '+6% SPEED, FASTER DASH', desc: ['Light on your feet.', 'Lighter on your feet.', 'Feet? Optional.'] },
-  ];
-  const TIERS = 3;
-
-  class SkillsScreen extends ERX.PanelScreen {
-    enter(p) {
-      this.game = p.game;
-      this.c = this.game.character;
-      this.maxW = 380;
-      this.maxH = 250;
-      this.col = 0; this.row = 0;
-      this.flash = {};
-      this.backBtn = new Button({ label: 'BACK', icon: 'back', sound: null, onActivate: () => this.back() });
-      this.onBack = false;
-    }
-    _level(b) { return this.c.skills[b.id] || 0; }
-    _buy() {
-      const br = BRANCHES[this.col];
-      const lvl = this._level(br);
-      if (this.row !== lvl) {
-        sfx('deny');
-        ERX.Toast.show(this.row < lvl ? 'Already learned. You are welcome.' : 'Learn the skills below it first.', { color: '#ff8a6a' });
-        return;
-      }
-      if ((this.c.skillPoints || 0) <= 0) {
-        sfx('deny');
-        ERX.Toast.show('No skill points. Get stronger. Or wait for the Voice to feel generous.', { color: '#ff8a6a' });
-        return;
-      }
-      this.c.skillPoints--;
-      this.c.skills[br.id] = lvl + 1;
-      ERX.Saves.update(this.c);
-      this.game.player.applySkills();
-      this.flash[br.id + lvl] = 1;
-      sfx('star');
-      ERX.FX.shake(1, 0.15);
-      ERX.Toast.show(br.name + ' ' + (lvl + 1) + ' learned! ' + br.per + '.', { color: br.color });
-    }
-    update(dt, input, active) {
-      for (const k of Object.keys(this.flash)) this.flash[k] = Math.max(0, this.flash[k] - dt * 2);
-      if (this.handleBack(input, active)) return;
-      if (!active) return;
-      if (ERX.Keybinds.wasPressed('skills')) { this.back(); return; }
-      for (const a of input.actions) {
-        if (this.onBack) {
-          if (a === 'up') { this.onBack = false; sfx('move'); }
-          else if (a === 'confirm') this.backBtn.activate();
-          continue;
-        }
-        if (a === 'left') { this.col = (this.col + 2) % 3; sfx('move'); }
-        if (a === 'right') { this.col = (this.col + 1) % 3; sfx('move'); }
-        if (a === 'up') { if (this.row < TIERS - 1) { this.row++; sfx('move'); } else this._pokeElement(); }
-        if (a === 'down') { if (this.row > 0) { this.row--; sfx('move'); } else { this.onBack = true; sfx('move'); } }
-        if (a === 'confirm') this._buy();
-      }
-      // mouse
-      const m = input.mouse;
-      if (this.nodes) {
-        for (const n of this.nodes) {
-          const hit = m.x >= n.x && m.x < n.x + n.w && m.y >= n.y && m.y < n.y + n.h;
-          if (hit && m.moved && (n.col !== this.col || n.row !== this.row || this.onBack)) { this.col = n.col; this.row = n.row; this.onBack = false; sfx('hover'); }
-          if (hit && m.pressed[0]) { this.col = n.col; this.row = n.row; this.onBack = false; this._buy(); }
-        }
-        const er = this.elementRect;
-        if (er && m.pressed[0] && m.x >= er.x && m.x < er.x + er.w && m.y >= er.y && m.y < er.y + er.h) this._pokeElement();
-      }
-      const b = this.backBtn;
-      if (m.moved && b.contains(m.x, m.y)) this.onBack = true;
-      if (m.pressed[0] && b.contains(m.x, m.y)) b.activate();
-      b.update(dt, this.onBack);
-    }
-    _pokeElement() {
-      sfx('deny', { minGap: 0.2 });
-      ERX.Toast.show(ERX.Elements.get(this.c.element) ? 'ELEMENT SKILLS: still being built. Your element is doing stretches.' : 'ELEMENT SKILLS: locked until your element reveals itself. It is shy.', { color: '#c89aff' });
-    }
-    render(ctx) {
-      const W = ERX.Display.width, H = ERX.Display.height;
-      this.drawDim(ctx, W, H);
-      const p = this.panel(W, H);
-      T.drawPanel(ctx, p.x, p.y, p.w, p.h);
-      T.drawTitlePlate(ctx, p.x + p.w / 2, p.y - 10, 'SKILL TREE');
-      const pts = this.c.skillPoints || 0;
-      F.draw(ctx, 'SKILL POINTS: ' + (pts > 0 ? '{gold}' : '{gray}') + pts + '{/}', p.x + 14, p.y + 16, { color: T.text });
-
-      // element core (locked)
-      const ex = p.x + p.w / 2, ey = p.y + 38;
-      const pulse = 0.5 + 0.5 * Math.sin(this.time * 2);
-      const ew = 104, eh = 30;
-      this.elementRect = { x: ex - ew / 2, y: ey - 4, w: ew, h: eh };
-      T.rect(ctx, ex - ew / 2, ey - 4, ew, eh, T.ink);
-      T.rect(ctx, ex - ew / 2 + 1, ey - 3, ew - 2, eh - 2, ERX.Color.mix('#2a1840', '#4a2a70', pulse));
-      ERX.Sprites.drawIcon(ctx, 'lock', ex - 4, ey, '#c89aff', '#ffd34d');
-      const el = ERX.Elements.get(this.c.element);
-      F.draw(ctx, el ? 'ELEMENT: {el' + el.id + '}' + el.name.toUpperCase() + '{/}' : 'ELEMENT: ???', ex, ey + 10, { color: '#e0c8ff', align: 'center' });
-      F.draw(ctx, el ? '{rar' + el.rarity + '}' + ERX.Elements.rarityOf(el).name.toUpperCase() + '{/} - skills coming soon' : 'not revealed yet', ex, ey + 19, { color: T.textMute, align: 'center' });
-
-      // branches
-      this.nodes = [];
-      const colW = Math.floor((p.w - 40) / 3);
-      const nodeS = 22;
-      const baseY = p.y + p.h - 70;
-      BRANCHES.forEach((br, ci) => {
-        const cx = p.x + 20 + colW * ci + colW / 2;
-        const lvl = this._level(br);
-        // trunk line up to the element core
-        T.rect(ctx, cx, ey + eh - 4, 1, baseY - (ey + eh - 4), lvl > 0 ? br.color : '#2e3354');
-        for (let r = 0; r < TIERS; r++) {
-          const ny = baseY - r * 34 - nodeS / 2;
-          const nx = Math.round(cx - nodeS / 2);
-          const learned = r < lvl, available = r === lvl;
-          const sel = !this.onBack && this.col === ci && this.row === r;
-          this.nodes.push({ x: nx, y: ny, w: nodeS, h: nodeS, col: ci, row: r });
-          T.rect(ctx, nx - 1, ny - 1, nodeS + 2, nodeS + 2, sel ? T.gold : T.ink);
-          T.rect(ctx, nx, ny, nodeS, nodeS, learned ? br.color : available ? '#2a3470' : '#161b3a');
-          T.rect(ctx, nx, ny, nodeS, 1, learned ? ERX.Color.shade(br.color, 0.35) : '#3a4783');
-          const fl = this.flash[br.id + r] || 0;
-          if (fl > 0) { ctx.fillStyle = 'rgba(255,255,255,' + fl.toFixed(2) + ')'; ctx.fillRect(nx, ny, nodeS, nodeS); }
-          F.draw(ctx, br.icon, nx + nodeS / 2, ny + 7, { color: learned ? '#ffffff' : available ? br.color : '#3e4470', align: 'center' });
-          if (available && pts > 0 && Math.floor(this.time * 3) % 2 === 0) T.rect(ctx, nx + nodeS - 4, ny + 1, 3, 3, T.gold);
-        }
-        F.draw(ctx, br.name, cx, baseY + 16, { color: br.color, align: 'center', shadow: T.ink });
-        F.draw(ctx, lvl + '/' + TIERS, cx, baseY + 26, { color: T.textMute, align: 'center' });
-      });
-
-      // description of the selected node
-      const br = BRANCHES[this.col];
-      const lvl = this._level(br);
-      let info;
-      if (this.onBack) info = 'Back to the game.';
-      else if (this.row < lvl) info = br.name + ' ' + (this.row + 1) + ': ' + br.desc[this.row] + ' (learned)';
-      else if (this.row === lvl) info = br.name + ' ' + (this.row + 1) + ': ' + br.desc[this.row] + ' ' + br.per + '. Cost: 1 point.';
-      else info = br.name + ' ' + (this.row + 1) + ': locked. Learn the one below first.';
-      F.draw(ctx, info, p.x + p.w / 2, p.y + p.h - 34, { color: T.textDim, align: 'center' });
-      this.backBtn.setRect(p.x + p.w / 2 - 40, p.y + p.h - 22, 80, 16);
-      this.backBtn.render(ctx, this.onBack);
     }
   }
 
@@ -327,7 +190,6 @@
   }
 
   ERX.Scenes.register('pause', PauseScreen);
-  ERX.Scenes.register('skills', SkillsScreen);
   ERX.Scenes.register('inventory', InventoryScreen);
   ERX.Scenes.register('demoEnd', DemoEndScreen);
 })(window.ERX = window.ERX || {});

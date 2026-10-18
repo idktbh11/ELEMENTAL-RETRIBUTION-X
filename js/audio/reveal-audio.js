@@ -37,6 +37,98 @@
     }));
   }
 
+  /** A single lead-guitar note (bright saw through the pedal), with an optional bend. */
+  function lead(a, amp, f, t, dur, o) {
+    o = o || {};
+    a.tone(amp, { wave: 'sawtooth', freq: f, freqEnd: o.bend ? f * o.bend : undefined, slideTime: o.bendT || dur * 0.6, t, dur, vol: o.vol || 0.12, attack: 0.004, release: o.rel || 0.15, sustain: 0.85, decay: 0.1, vibrato: o.vib ? f * 0.025 : 0, vibratoRate: 6.5, vibratoDelay: o.vibDelay || 0.15 });
+  }
+
+  // ------------------------------------------------- the rarity riffs
+  // tier: 1 uncommon, 2 rare, 3 epic, 4 legendary, 5 MYTHIC (Chaos)
+  const RIFFS = {
+    /** Uncommon: a bright, bouncy pentatonic run up to a big A. */
+    1(a, d, t) {
+      const amp = pedal(a, d, 45, 0.33, 4200), A = 110, C = 130.81, D = 146.83, E = 164.81, G = 196;
+      crashCym(a, d, t, 0.1); kick(a, d, t);
+      [A, C, D, E, G, A * 2].forEach((f, i) => powerChord(a, amp, f / 2, t + i * 0.08, 0.07, { mute: true }));
+      powerChord(a, amp, A, t + 0.55, 0.9, { vib: true });
+      lead(a, amp, 880, t + 0.55, 0.5, { vib: true, vol: 0.06 });
+      kick(a, d, t + 0.55, 0.35); crashCym(a, d, t + 0.55, 0.1);
+    },
+    /** Rare: a galloping riff, ending in a screaming pinch harmonic. */
+    2(a, d, t) {
+      const amp = pedal(a, d, 70, 0.33, 3600), E = 82.41, G = 98, B = 123.47;
+      crashCym(a, d, t, 0.12);
+      for (let bar = 0; bar < 4; bar++) {
+        const b0 = t + bar * 0.24, root = bar === 3 ? G : E;
+        powerChord(a, amp, root, b0, 0.06, { mute: true });
+        powerChord(a, amp, root, b0 + 0.08, 0.05, { mute: true });
+        powerChord(a, amp, root, b0 + 0.14, 0.08, { mute: true });
+        kick(a, d, b0, 0.3);
+      }
+      powerChord(a, amp, B, t + 0.98, 1.0, { vib: true });
+      kick(a, d, t + 0.98, 0.45); crashCym(a, d, t + 0.98, 0.14);
+      lead(a, amp, 1760, t + 1.0, 0.7, { bend: 1.12, bendT: 0.25, vib: true, vol: 0.07 });     // the squeal
+    },
+    /** Epic: heavy drop-D, double kicks, stabs and a long tremolo bend. */
+    3(a, d, t) {
+      const amp = pedal(a, d, 90, 0.36, 3000), D = 73.42, F = 87.31, G = 98, Bb = 116.54;
+      crashCym(a, d, t, 0.14);
+      for (let i = 0; i < 12; i++) kick(a, d, t + i * 0.07, 0.25);                            // double kick
+      [D, D, F, D, G, F].forEach((f, i) => powerChord(a, amp, f, t + i * 0.12, 0.09, { mute: i % 2 === 0 }));
+      powerChord(a, amp, Bb, t + 0.8, 0.25);
+      powerChord(a, amp, D, t + 1.1, 1.3, { vib: true });
+      for (let i = 0; i < 10; i++) lead(a, amp, 587.33, t + 1.1 + i * 0.06, 0.05, { vol: 0.05 });   // tremolo picking
+      lead(a, amp, 587.33, t + 1.7, 0.7, { bend: 1.06, vib: true, vol: 0.07 });
+      kick(a, d, t + 1.1, 0.5); crashCym(a, d, t + 1.1, 0.16);
+    },
+    /** Legendary: huge chords under a soaring lead solo, plus a choir. */
+    4(a, d, t) {
+      const amp = pedal(a, d, 75, 0.34, 3800), E = 82.41, C = 130.81 / 2, D = 73.42, B = 61.74;
+      crashCym(a, d, t, 0.16); kick(a, d, t, 0.5);
+      powerChord(a, amp, E, t, 0.5); powerChord(a, amp, C * 2, t + 0.5, 0.5); powerChord(a, amp, D, t + 1.0, 0.5); powerChord(a, amp, B * 2, t + 1.5, 1.2, { vib: true });
+      [0.5, 1.0, 1.5].forEach((s) => { kick(a, d, t + s, 0.4); crashCym(a, d, t + s, 0.08); });
+      // the solo
+      const lick = [659.25, 783.99, 880, 987.77, 880, 783.99, 987.77, 1174.66, 1318.5];
+      lick.forEach((f, i) => lead(a, amp, f, t + 0.25 + i * 0.13, 0.12, { vol: 0.06 }));
+      lead(a, amp, 1318.5, t + 1.5, 1.1, { bend: 1.06, vib: true, vol: 0.07 });
+      for (const f of [329.63, 415.3, 493.88]) a.tone(d, { wave: 'triangle', freq: f, t: t + 1.5, dur: 1.4, vol: 0.03, attack: 0.3, release: 0.8, vibrato: 4, vibratoRate: 5 });
+    },
+    /**
+     * MYTHIC — Chaos. Ominous: slow, low, detuned, tritones, a heartbeat,
+     * a reversed swell, and a final chord that sinks like the floor gave way.
+     */
+    5(a, d, t) {
+      const amp = pedal(a, d, 120, 0.38, 2400), B0 = 61.74, F1 = 87.31;   // B and F: the devil's interval
+      // a low drone, and a heartbeat
+      a.tone(d, { wave: 'sawtooth', freq: 30.87, t, dur: 3.2, vol: 0.08, attack: 0.6, release: 0.8, vibrato: 0.6, vibratoRate: 0.7 });
+      [0, 0.18, 0.9, 1.08].forEach((s, i) => kick(a, d, t + s, i % 2 ? 0.3 : 0.45));
+      // slow, heavy, detuned tritone stabs
+      const stab = (f, s, dur) => { powerChord(a, amp, f, t + s, dur); powerChord(a, amp, f * 1.012, t + s, dur); };
+      stab(B0, 0, 0.5);
+      stab(F1, 0.6, 0.4);
+      stab(B0 * 1.059, 1.1, 0.35);                                   // a minor second up: wrong on purpose
+      // the reversed swell (noise that pulls IN), then the drop
+      a.noiseBurst(d, { t: t + 1.0, dur: 0.9, vol: 0.22, type: 'bandpass', freq: 200, freqEnd: 3000, Q: 1.2, attack: 0.85, release: 0.04 });
+      a.tone(amp, { wave: 'sawtooth', freq: B0, freqEnd: B0 * 0.5, slideTime: 1.4, t: t + 1.9, dur: 1.6, vol: 0.2, attack: 0.002, release: 0.6, sustain: 0.9 });
+      a.tone(amp, { wave: 'sawtooth', freq: F1, freqEnd: F1 * 0.5, slideTime: 1.4, t: t + 1.9, dur: 1.6, vol: 0.16, attack: 0.002, release: 0.6, sustain: 0.9 });
+      kick(a, d, t + 1.9, 0.7); crashCym(a, d, t + 1.9, 0.2);
+      a.tone(d, { wave: 'sine', freq: 50, freqEnd: 24, t: t + 1.9, dur: 1.4, vol: 0.45, release: 0.8 });
+      // an eerie, wavering whine up high
+      a.tone(d, { wave: 'sine', freq: 1975.5, freqEnd: 1864.7, slideTime: 2.5, t: t + 0.3, dur: 2.8, vol: 0.025, attack: 1.2, release: 1, vibrato: 30, vibratoRate: 3.3 });
+      a.tone(d, { wave: 'sine', freq: 2793.8, t: t + 1.9, dur: 1.6, vol: 0.015, attack: 0.5, release: 1, vibrato: 50, vibratoRate: 7 });
+    },
+  };
+
+  /** MYTHIC's sting: not a fanfare. A slow diminished descent and a choir that sounds WRONG. */
+  function mythicSting(a, d, t) {
+    [1046.5, 880, 739.99, 622.25, 523.25, 440, 369.99].forEach((f, i) => a.tone(d, { wave: 'square', freq: f, t: t + i * 0.14, dur: 0.12, vol: 0.05, attack: 0.002, release: 0.3 }));
+    const end = t + 1.0;
+    for (const f of [130.81, 184.99, 246.94, 261.63]) a.tone(d, { wave: 'sawtooth', freq: f, t: end, dur: 2.4, vol: 0.022, attack: 0.5, release: 1.2, vibrato: 3, vibratoRate: 4.5 });
+    a.tone(d, { wave: 'sine', freq: 49, freqEnd: 30, t: end, dur: 1.6, vol: 0.35, release: 1 });
+    a.noiseBurst(d, { t: end, dur: 1.6, vol: 0.08, type: 'lowpass', freq: 500, attack: 0.1, release: 1.2 });
+  }
+
   function kick(a, d, t, v) { a.tone(d, { wave: 'sine', freq: 140, freqEnd: 40, t, dur: 0.12, vol: v || 0.4, release: 0.1 }); }
   function crashCym(a, d, t, v) { a.noiseBurst(d, { t, dur: 1.4, vol: v || 0.12, type: 'highpass', freq: 5000, attack: 0.002, release: 1.3 }); }
 
@@ -126,6 +218,7 @@
      */
     raritySting(a, d, t, o) {
       const tier = (o && o.tier) || 0;
+      if (tier >= 5) { mythicSting(a, d, t); return; }
       const scale = [523.25, 659.25, 783.99, 1046.5, 1318.5, 1568.0, 2093.0];
       const n = 2 + tier;
       const step = tier >= 5 ? 0.09 : 0.11;
@@ -149,7 +242,89 @@
       }
     },
     /** The big distorted guitar riff (in E). ~2.4 s. */
-    guitarRiff(a, d, t) {
+    /** Ultimate: a quick, punchy riff for the title slam (~0.8 s). */
+    ultRiff(a, d, t) {
+      const amp = pedal(a, d, 70, 0.4, 3600);
+      const E = 82.41, G = 98.0, A = 110.0;
+      crashCym(a, d, t, 0.16); kick(a, d, t, 0.5);
+      powerChord(a, amp, E, t, 0.07, { mute: true });
+      powerChord(a, amp, G, t + 0.09, 0.07, { mute: true });
+      powerChord(a, amp, A, t + 0.18, 0.6, { vib: true });
+      kick(a, d, t + 0.18, 0.4);
+    },
+    /**
+     * AWAKENED Ultimate: a slower, heavier, far more menacing riff (~1.1 s).
+     * o.seed (the element) picks the root note and one of four patterns.
+     */
+    awakenRiff(a, d, t, o) {
+      const seed = Math.abs((o && o.seed) || 0);
+      const roots = [61.74, 55.0, 58.27, 65.41, 51.91];        // B0 A0 Bb0 C1 Ab0: low, low, low
+      const R = roots[seed % roots.length], amp = pedal(a, d, 140, 0.4, 2600);
+      const st = (f, s, dur, o2) => { powerChord(a, amp, f, t + s, dur, o2); powerChord(a, amp, f * 1.008, t + s, dur, o2); };   // doubled + detuned
+      const m2 = semis(R, 1), tt = semis(R, 6), m3 = semis(R, 3);
+      crashCym(a, d, t, 0.18); kick(a, d, t, 0.6);
+      a.tone(d, { wave: 'sine', freq: 46, freqEnd: 28, t, dur: 0.9, vol: 0.45, release: 0.6 });   // sub drop
+      switch (seed % 4) {
+        case 0: // chug chug chug -> the minor second -> a long sinking tritone
+          for (let i = 0; i < 4; i++) { st(R, i * 0.07, 0.05, { mute: true }); kick(a, d, t + i * 0.07, 0.3); }
+          st(m2, 0.3, 0.12); st(tt, 0.45, 0.6, { vib: true });
+          a.tone(amp, { wave: 'sawtooth', freq: tt * 2, freqEnd: tt, slideTime: 0.6, t: t + 0.45, dur: 0.6, vol: 0.12, release: 0.3 });
+          break;
+        case 1: // slow doom: root... flat five... the floor drops out
+          st(R, 0, 0.32); st(tt, 0.34, 0.26); kick(a, d, t + 0.34, 0.5);
+          a.tone(amp, { wave: 'sawtooth', freq: R * 2, freqEnd: R, slideTime: 0.5, t: t + 0.62, dur: 0.55, vol: 0.2, release: 0.4 });
+          lead(a, amp, semis(R, 30), t + 0.62, 0.5, { bend: 0.94, vib: true, vol: 0.06 });
+          break;
+        case 2: // a gallop and a diminished descent
+          [0, 0.06, 0.1, 0.2, 0.26, 0.3].forEach((s) => st(R, s, 0.04, { mute: true }));
+          [semis(R, 12), semis(R, 9), semis(R, 6), m3].forEach((f, i) => lead(a, amp, f * 2, t + 0.42 + i * 0.09, 0.08, { vol: 0.07 }));
+          st(R, 0.8, 0.4, { vib: true }); kick(a, d, t + 0.8, 0.55);
+          break;
+        default: // stabs, a pinch harmonic squeal, a dive bomb
+          st(R, 0, 0.1); st(m2, 0.14, 0.1); st(R, 0.28, 0.1); st(tt, 0.42, 0.5);
+          lead(a, amp, semis(R, 43), t + 0.44, 0.45, { bend: 1.05, bendT: 0.15, vib: true, vol: 0.06 });
+          a.tone(amp, { wave: 'sawtooth', freq: tt, freqEnd: tt * 0.25, slideTime: 0.5, t: t + 0.9, dur: 0.5, vol: 0.14, release: 0.3 });
+      }
+      a.tone(d, { wave: 'sine', freq: semis(R, 54), t: t + 0.3, dur: 0.9, vol: 0.016, attack: 0.3, release: 0.5, vibrato: 40, vibratoRate: 6 });   // an eerie whine
+    },
+    /** Awakening: power being dragged in (~1.1 s). */
+    awakenCharge(a, d, t) {
+      a.tone(d, { wave: 'sawtooth', freq: 40, freqEnd: 160, slideTime: 1.1, t, dur: 1.15, vol: 0.09, attack: 0.3, release: 0.05, vibrato: 3, vibratoRate: 9 });
+      a.tone(d, { wave: 'sawtooth', freq: 60.5, freqEnd: 242, slideTime: 1.1, t, dur: 1.15, vol: 0.06, attack: 0.3, release: 0.05 });
+      a.noiseBurst(d, { t, dur: 1.15, vol: 0.16, type: 'bandpass', freq: 200, freqEnd: 3500, Q: 1.3, attack: 1.0, release: 0.05 });
+      [0, 0.35, 0.62, 0.84, 1.0].forEach((s, i) => kick(a, d, t + s, 0.2 + i * 0.07));   // a heartbeat that speeds up
+    },
+    /** Awakening: the burst. */
+    awakenBurst(a, d, t) {
+      kick(a, d, t, 0.8);
+      a.tone(d, { wave: 'sine', freq: 70, freqEnd: 26, t, dur: 1.4, vol: 0.55, release: 1.0 });
+      a.noiseBurst(d, { t, dur: 1.6, vol: 0.32, type: 'lowpass', freq: 6000, freqEnd: 200, attack: 0.002, release: 1.4 });
+      crashCym(a, d, t, 0.2);
+      const amp = pedal(a, d, 110, 0.36, 2800);
+      powerChord(a, amp, 55, t, 1.3, { vib: true }); powerChord(a, amp, 55.5, t, 1.3);
+      for (const f of [220, 261.63, 311.13, 369.99]) a.tone(d, { wave: 'sawtooth', freq: f, t: t + 0.05, dur: 1.6, vol: 0.016, attack: 0.25, release: 1.1, vibrato: 4, vibratoRate: 5 });
+    },
+    /** Awakening wears off. */
+    awakenEnd(a, d, t) {
+      a.tone(d, { wave: 'triangle', freq: 660, freqEnd: 110, slideTime: 0.8, t, dur: 0.8, vol: 0.07, release: 0.3 });
+      a.noiseBurst(d, { t, dur: 0.6, vol: 0.08, type: 'highpass', freq: 3000, freqEnd: 800, release: 0.4 });
+    },
+    /** Ultimate: hands clap together, power cracks out of them. */
+    ultClap(a, d, t) {
+      a.noiseBurst(d, { t, dur: 0.04, vol: 0.3, type: 'bandpass', freq: 2200, Q: 0.9, attack: 0.001, release: 0.08 });
+      a.tone(d, { wave: 'sine', freq: 180, freqEnd: 60, t, dur: 0.2, vol: 0.25, release: 0.2 });
+      a.tone(d, { wave: 'triangle', freq: 1400, freqEnd: 2600, slideTime: 0.3, t: t + 0.03, dur: 0.3, vol: 0.04, release: 0.2 });
+    },
+    /** Ultimate: power building up. */
+    ultCharge(a, d, t) {
+      a.tone(d, { wave: 'sawtooth', freq: 90, freqEnd: 360, slideTime: 1.2, t, dur: 1.2, vol: 0.05, attack: 0.2, release: 0.1 });
+      a.tone(d, { wave: 'sine', freq: 180, freqEnd: 720, slideTime: 1.2, t, dur: 1.2, vol: 0.04, attack: 0.2, release: 0.1 });
+      a.noiseBurst(d, { t, dur: 1.2, vol: 0.05, type: 'bandpass', freq: 1200, Q: 0.6, attack: 1.0, release: 0.1 });
+    },
+    guitarRiff(a, d, t, o) {
+      // every rarity gets its own riff (Common keeps the classic one below)
+      const tier = (o && o.tier) || 0;
+      if (tier > 0 && RIFFS[tier]) { RIFFS[tier](a, d, t); return; }
       const amp = pedal(a, d, 60, 0.35, 3400);
       const E = 82.41, G = 98.0, A = 110.0, D = 73.42;
       const s = 0.1;

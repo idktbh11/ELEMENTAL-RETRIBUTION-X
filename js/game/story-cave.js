@@ -23,6 +23,14 @@
     return yield () => g.dialogue.result;
   }
   const v = (g, text, o) => say(g, VOICE, text, o);
+  /** The Voice starts a line... and stops himself before it's finished. */
+  function* cutOff(g, text) {
+    g.lockControls(true);
+    g.dialogue.say(VOICE, text, {});
+    yield () => (g.dialogue.typing ? undefined : true);
+    yield 0.25;
+    g.dialogue.close();
+  }
   const angry = (g, text) => say(g, VOICE, text, { effect: 'shake' });
   function* me(g, text) { return yield* say(g, g.playerSpeaker, text, { speed: 60 }); }
   function* choose(g, labels) {
@@ -75,6 +83,7 @@
     yield 0.6;
     yield* v(g, '...');
     yield* v(g, 'Uh.');
+    if (ERX.Achievements.has('tutorial')) { yield* recognised(g); return; }
     yield* v(g, 'Hold on. Who are YOU?');
     yield* v(g, 'How did you even get in here?');
     g.releaseCamera();
@@ -125,6 +134,32 @@
     yield* v(g, 'Pay attention. I am only explaining this once. (I will explain it as many times as you need.)');
     g.bossBar = null;
     yield* tutorial(g);
+  }
+
+  // ============================== SOMEONE WHO ALREADY BEAT THE TUTORIAL
+  function* recognised(g) {
+    yield* cutOff(g, 'Hold on. Who are you, and how did you even get in h-');
+    g.shake(1, 0.2);
+    yield 0.4;
+    yield* v(g, '...wait.');
+    yield* v(g, 'Have I seen you before?');
+    yield* v(g, "You look familiar. Weirdly familiar. Like... I've-already-explained-jumping-to-you familiar.");
+    g.releaseCamera();
+    const c = yield* choose(g, ['Go through the tutorial again.', 'Skip it. Take me to the elevator.']);
+    if (c === 0) {
+      yield* me(g, 'Go through the tutorial again.');
+      yield* v(g, 'Again?! Wow. Okay. A classic. From the top, then.');
+      g.bossBar = null;
+      yield* tutorial(g);
+      return;
+    }
+    yield* me(g, 'Skip it. Take me to the elevator.');
+    yield* v(g, 'Say no more. One express trip to the elevator, coming right up.');
+    yield* v(g, "Here. Your skill point. Don't say I never gave you anything.");
+    g.givePoints(1);
+    yield* v(g, '*finger snap*', { effect: null, speed: 20 });
+    g.bossBar = null;
+    g.skipToElevator();
   }
 
   // ============================================================ TUTORIAL
@@ -212,6 +247,7 @@
     yield* v(g, 'Now go. Kill some enemies. Shoo.');
     g.music('onward');
     g.saveProgress('tutorialDone');
+    ERX.Achievements.unlock('tutorial');
     g.allowDeath = true;
     g.lockControls(false);
     g.setObjective('GO FIGHT SOME ENEMIES  →', null, 1);
@@ -234,5 +270,5 @@
   }
 
   ERX.Story = ERX.Story || {};
-  ERX.Story.cave = { arenaIntro, tutorial, returning, readSign, VOICE, SIGN };
+  ERX.Story.cave = { arenaIntro, tutorial, recognised, returning, readSign, VOICE, SIGN };
 })(window.ERX = window.ERX || {});

@@ -55,7 +55,7 @@
     { id: 'sound', name: 'Sound', color: '#5ae8a8', dark: '#1a7a5a', desc: 'Loud. Very loud. The neighbours have complained.', world: { tint: '#80f0c0', particles: 'notes', weather: 'echoing', mood: 'loud' } },
     { id: 'mist', name: 'Mist', color: '#c8d4e0', dark: '#6a7a8a', desc: 'Now you see it. Now you mostly don\'t.', world: { tint: '#dce4ec', particles: 'fog', weather: 'foggy', mood: 'mysterious' } },
     { id: 'spirit', name: 'Spirit', color: '#a8fff0', dark: '#3a9a9a', desc: 'You can see things others can\'t. Some of them wave.', world: { tint: '#c0fff4', particles: 'souls', weather: 'ethereal', mood: 'haunting' } },
-    { id: 'chaos', name: 'Chaos', color: '#ff3aa0', dark: '#4a0a3a', desc: 'Rules? Never heard of them. Neither has your element.', world: { tint: '#ff70c0', particles: 'everything', weather: 'random', mood: 'unhinged' } },
+    { id: 'chaos', name: 'Chaos', color: '#ff3aa0', dark: '#4a0a3a', desc: 'Rules? Never heard of them. Neither has your element.', world: { tint: '#ff70c0', particles: 'everything', weather: 'random', mood: 'unhinged', intensity: 2 } },
   ];
 
   // ------------------------------------------------------------ RARITY

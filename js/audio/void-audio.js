@@ -98,6 +98,26 @@
       a.tone(d, { wave: 'sawtooth', freq: 200, freqEnd: 1600, slideTime: 1.2, t, dur: 1.2, vol: 0.06, attack: 0.05, release: 0.2 });
       a.noiseBurst(d, { t, dur: 1.3, vol: 0.08, type: 'bandpass', freq: 1500, Q: 0.6, attack: 0.3, release: 0.4 });
     },
+    // ------------------------------------------------------- abilities
+    cast(a, d, t) {
+      a.noiseBurst(d, { t, dur: 0.12, vol: 0.06, type: 'bandpass', freq: 1800, Q: 0.8, release: 0.1 });
+      a.tone(d, { wave: 'triangle', freq: rand(500, 700), freqEnd: rand(900, 1300), slideTime: 0.1, t, dur: 0.1, vol: 0.04, release: 0.1 });
+    },
+    whoosh(a, d, t) { a.noiseBurst(d, { t, dur: 0.35, vol: 0.07, type: 'bandpass', freq: 900, Q: 0.6, attack: 0.1, release: 0.2 }); },
+    zap(a, d, t) {
+      for (let i = 0; i < 4; i++) a.tone(d, { wave: 'square', freq: rand(900, 2400), t: t + i * 0.025, dur: 0.025, vol: 0.04, release: 0.02 });
+      a.noiseBurst(d, { t, dur: 0.12, vol: 0.08, type: 'highpass', freq: 3000, release: 0.1 });
+    },
+    boom(a, d, t) {
+      a.noiseBurst(d, { t, dur: 0.3, vol: 0.18, type: 'lowpass', freq: 900, attack: 0.002, release: 0.35 });
+      a.tone(d, { wave: 'sine', freq: 120, freqEnd: 40, t, dur: 0.3, vol: 0.25, release: 0.25 });
+    },
+    ultimate(a, d, t) {
+      a.tone(d, { wave: 'sawtooth', freq: 110, freqEnd: 440, slideTime: 0.3, t, dur: 0.3, vol: 0.06, release: 0.1 });
+      for (const f of [440, 554, 659, 880]) a.tone(d, { wave: 'square', freq: f, t: t + 0.3, dur: 0.5, vol: 0.04, attack: 0.01, release: 0.6 });
+      a.noiseBurst(d, { t: t + 0.3, dur: 0.6, vol: 0.12, type: 'lowpass', freq: 1400, release: 0.6 });
+      a.tone(d, { wave: 'sine', freq: 60, t: t + 0.3, dur: 0.8, vol: 0.3, release: 0.5 });
+    },
     // ------------------------------------------------------- money
     coin(a, d, t) {
       a.tone(d, { wave: 'square', freq: 1319, t, dur: 0.05, vol: 0.04, release: 0.03 });

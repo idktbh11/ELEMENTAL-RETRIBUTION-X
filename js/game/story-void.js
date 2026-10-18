@@ -75,6 +75,73 @@
   };
   const FALLBACK = { expr: 'neutral', lines: ['{E}. Huh. Never seen that one before.', "Neat. I have no jokes prepared. That's a first."] };
 
+  // ================================================== CHAOS: THE SCAN GOES VERY WRONG
+  // The rarest, most dangerous element in the universe. He does not take it well.
+  function* chaosReaction(g, name) {
+    const f = g.figure;
+    g.music(null);
+    f.expr = 'shock';
+    f.bubble = 'bang';
+    f.hop = 1;
+    sfx('figureShock');
+    g.shake(5, 0.5);
+    yield 0.6;
+    // he stumbles back... and goes down
+    f.x += f.facing * -6;
+    yield 0.15;
+    f.x += f.facing * -5;
+    f.pose = 'fallen';
+    sfx('thud');
+    g.shake(3, 0.25);
+    yield 0.8;
+    f.shakeT = 99;                    // trembling, the whole time he's down there
+    yield* fig(g, 'C-C-C...', { effect: 'shake' });
+    yield* fig(g, name + '?!?!', { effect: 'shake' });
+    yield* fig(g, "No. No no no no NO. That's not possible. My scanner's broken.", { effect: 'shake' });
+    // he scans you again from the floor, just to be sure
+    g.startScan(1.2);
+    yield 1.4;
+    g.scanResult();
+    yield 0.6;
+    yield* fig(g, "...My scanner is not broken.", { effect: 'shake' });
+    g.music('voice');
+    yield* fig(g, 'Do you have ANY idea what you are carrying right now?!', { effect: 'shake' });
+    yield* fig(g, 'That is the STRONGEST ELEMENT IN HISTORY. The rarest thing in the ENTIRE universe!', { effect: 'shake' });
+    yield* fig(g, "Nobody has had that in... I don't even KNOW how long! Nobody knows! Nobody was supposed to EVER get it!", { effect: 'shake' });
+    f.bubble = null;
+    const c = yield* choose(g, ['Is that... good?', 'Cool.', '*point back at him*']);
+    if (c === 0) {
+      yield* me(g, 'Is that... good?');
+      yield* fig(g, "GOOD?! It's good AND bad AND everything else at the same time! That's the PROBLEM!", { effect: 'shake' });
+    } else if (c === 1) {
+      yield* me(g, 'Cool.');
+      yield* fig(g, '"COOL"?! You just won the COSMIC LOTTERY and you said "COOL"?!', { effect: 'shake' });
+    } else {
+      g.player.facing = f.x > g.player.cx ? 1 : -1;
+      yield* me(g, '*points back at him*');
+      yield* fig(g, "DON'T POINT BACK AT ME! I'm the one pointing! This is MY shocked moment!", { effect: 'shake' });
+    }
+    // he gets back up. With dignity. Mostly.
+    f.shakeT = 0;
+    f.pose = 'idle';
+    f.expr = 'nervous';
+    sfx('step');
+    yield 0.5;
+    yield* fig(g, '*ahem*');
+    yield* fig(g, "I'm fine. I'm totally fine. I meant to sit down. The floor looked comfy.");
+    f.expr = 'neutral';
+    g.music(null);
+    yield* fig(g, 'Listen to me. Seriously. For once.');
+    yield* fig(g, "Chaos doesn't follow rules. Not physics. Not logic. Not even the other elements.");
+    yield* fig(g, 'Something like you gets NOTICED. You are a {red}THREAT{/} now. To the monsters. To the pillars. Maybe to everything.');
+    yield* fig(g, 'The worlds will feel you coming. They will push back. Everything out there will be... a little harder for you than for anyone else.');
+    f.expr = 'sigh';
+    yield* fig(g, 'So be careful with the power you have. Please.');
+    f.expr = 'unamused';
+    yield* fig(g, "I would like my void to still exist next week.");
+    g.music('void');
+  }
+
   // ================================================== FLOATING -> AWAKE
   function* voidIntro(g) {
     const p = g.player;
@@ -178,10 +245,13 @@
     const el = g.element();
     g.scanResult();
     yield 1.2;
-    const said = ELEMENT_LINES[el.id] || FALLBACK;
-    f.expr = said.expr;
     const name = '{el' + el.id + '}' + el.name.toUpperCase() + '{/}';
-    for (const line of said.lines) yield* fig(g, line.replace('{E}', name));
+    if (el.id === 'chaos') yield* chaosReaction(g, name);
+    else {
+      const said = ELEMENT_LINES[el.id] || FALLBACK;
+      f.expr = said.expr;
+      for (const line of said.lines) yield* fig(g, line.replace('{E}', name));
+    }
 
     // ---- the Julforic Pillars ----
     f.expr = 'nervous';
@@ -297,6 +367,7 @@
     yield 1.0;
     yield* say(g, SLIME, '...');
     yield* say(g, SLIME, "Oh. It's YOU. Again.");
+    if (g.element() && g.element().id === 'chaos') yield* say(g, SLIME, '...Why are you flickering like that. Stay back. I mean it.');
     g.rev.slime.angry = true;
     yield* say(g, SLIME, 'World 1? Not here yet, be patient >:(', { effect: 'shake' });
     yield* say(g, SLIME, "It's still being built. Go back to your void. Shoo.");
@@ -323,7 +394,8 @@
     const B = npcSpeaker(MINERS.brenda);
     c.armorOwned = c.armorOwned || [];
     npc.talking = true;
-    yield* say(g, B, npc.visited ? 'Back again? I like repeat customers. I like ALL customers. There are three of you.' : "Welcome to Brenda's Armor! Protection for heroes, zeroes, and everyone in between.");
+    if (g.element() && g.element().id === 'chaos') yield* say(g, B, npc.visited ? "Back again, chaos kid? Please don't make the armor sentient this time." : "Welcome to Brenda's Ar— oh. OH. You're the one the boss won't shut up about. Honey, you're gonna NEED armor.");
+    else yield* say(g, B, npc.visited ? 'Back again? I like repeat customers. I like ALL customers. There are three of you.' : "Welcome to Brenda's Armor! Protection for heroes, zeroes, and everyone in between.");
     npc.visited = true;
     for (;;) {
       yield* say(g, B, 'You have {gold}' + (c.gold || 0) + 'G{/}. What will it be?');
@@ -375,6 +447,11 @@
         ["The boss is at his desk in the back. He's been sighing a lot today. More than usual."],
         ["We're a non-profit. Mostly because we've never made a profit."],
       ],
+      chaosLines: [
+        ['Welcome to HQ! Do you have an appoint—', '...', '...Is your outline supposed to flicker like that?', "No. Don't answer that. Please sign in. Please don't touch the pen."],
+        ["The boss told everyone about you. In capital letters. He made a memo. The memo just says 'CHAOS' and 'DON'T'."],
+        ["Our insurance doesn't cover you. I checked. Twice. They laughed at me."],
+      ],
     },
     kev: {
       name: 'INTERN KEV', pitch: 1.1,
@@ -383,6 +460,11 @@
         ["I'm the intern! I've been the intern for three hundred years!", 'Time works weird in the void. My contract does not.'],
         ["Want some coffee? It's void coffee.", "It's just an empty mug. There's nothing in it. It's very on-brand."],
         ['The boss says I might get promoted soon. He has said that every day for three hundred years.'],
+      ],
+      chaosLines: [
+        ["WHOA. You're the Chaos one?!", 'Can I get your autograph? ...Actually, can you sign it from over there? Like, far over there?'],
+        ["Want some void coffee? It's an empty mug.", '...You just looked at it and now there IS coffee in it. How. HOW.'],
+        ['The boss said Chaos might break reality. I said "cool". He did not think it was cool.'],
       ],
     },
     brenda: {
@@ -397,6 +479,10 @@
         ['Zzz... five more minutes... zzz...', '...zzz... the floor isn\'t real... zzz...'],
         ['(He is asleep. He has been asleep since the HQ was built. Nobody knows his job.)'],
       ],
+      chaosLines: [
+        ['Zzz... chaos... zzz...', '(He sits bolt upright, looks straight at you, says "so it begins" and falls back asleep.)'],
+        ['(He is asleep. He is sleeping slightly further away from you than usual.)'],
+      ],
     },
     atlas: {
       name: 'DR. ATLAS', pitch: 1.0,
@@ -405,6 +491,11 @@
         ['I study the Julforic Pillars. Big. Glowy. Rude.', 'Destroy one and the monsters in that world calm down. In theory. Theories are fun!'],
         ['Your element changes the worlds you visit. Fascinating! Also terrifying! Mostly fascinating!'],
         ['How many elements are there? ...Next question.'],
+      ],
+      chaosLines: [
+        ['CHAOS! A real, living Chaos! Oh, this is the best day of my career!', 'May I take a sample? A small one? A tiny bit of your aura? No? Worth asking!'],
+        ['Fascinating: the worlds bend a little more around you than around anyone else. They can FEEL you.', 'Also: the monsters out there will be tougher. Probably. Science!'],
+        ['My instruments explode when you walk past. I love it. Please keep walking past.'],
       ],
     },
     ron: {
@@ -415,6 +506,11 @@
         ["Armor's over at Brenda's. Can't punch pillars in your pajamas."],
         ["I'm not punching the air. I'm punching the VOID. Huge difference."],
       ],
+      chaosLines: [
+        ["So YOU'RE the Chaos one. Huh.", "...I'm not scared. I'm just standing over here for no reason. Leg day."],
+        ["Arm wrestle? ...Nah. Nah, I'm good. I like my arm. It's attached."],
+        ['Respect. Massive respect. From a safe distance.'],
+      ],
     },
     guide: {
       name: 'THE VOICE', speaker: FIG,
@@ -424,8 +520,14 @@
         ["I said I'd be at my HQ. I'm at my HQ. This is me. Being here."],
         ["Need armor? Talk to Brenda. Need advice? Also talk to Brenda. She's smarter than me."],
       ],
+      chaosLines: [
+        ['Oh. You came to the HQ. With your... CHAOS. Great. Wonderful.', "Don't touch anything. Don't LOOK at anything too hard. The plant already fainted."],
+        ['World 1 is unlocked. It knows you are coming. Be careful out there. I mean it.'],
+        ["I'm not nervous. I'm just standing behind my desk. The desk is load-bearing. For me."],
+        ["Remember: you're a threat now. Act like it. But a careful threat. A threat with manners."],
+      ],
     },
   });
 
-  ERX.Story.void = { voidIntro, meetFigure, jumpIntoWorld, backInVoid, shop, ELEMENT_LINES, FIG, THOUGHT };
+  ERX.Story.void = { voidIntro, meetFigure, chaosReaction, jumpIntoWorld, backInVoid, shop, ELEMENT_LINES, FIG, THOUGHT };
 })(window.ERX = window.ERX || {});

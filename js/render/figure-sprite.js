@@ -5,7 +5,7 @@
  *   ERX.FigureSprite.draw(ctx, cv, x, y)   feet (cloak hem) on (x, y)
  *
  * expr: neutral shock angry sigh unamused smug nervous
- * pose: idle point cast walk(2 frames)
+ * pose: idle point cast walk(2 frames) fallen (on the floor, pointing at you)
  * front = true draws him facing the camera (the middle of a slow turn).
  */
 (function (ERX) {
@@ -25,12 +25,13 @@
     const px = (x, y, col) => b.set(Math.round(x), Math.round(y), c32(col));
     const rect = (x, y, w, h, col) => { for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) px(x + xx, y + yy, col); };
     const cx = front ? 13 : 12;          // body centre
-    const bob = pose === 'walk' ? frame % 2 : 0;
+    const fallen = pose === 'fallen' && !front;
+    const bob = pose === 'walk' ? frame % 2 : fallen ? 8 : 0;   // fallen: sitting on the floor
 
     // ---- shoes peeking out under the hem ----
     const step = pose === 'walk' ? (frame % 2 ? 1 : -1) : 0;
-    rect(cx - 4 + step, 31, 3, 2, '#2a1a30');
-    rect(cx + 1 - step, 31, 3, 2, '#3a2440');
+    if (fallen) { rect(cx + 8, 31, 3, 2, '#2a1a30'); rect(cx + 10, 30, 3, 2, '#3a2440'); }   // legs out in front
+    else { rect(cx - 4 + step, 31, 3, 2, '#2a1a30'); rect(cx + 1 - step, 31, 3, 2, '#3a2440'); }
 
     // ---- the cloak ----
     for (let y = 13 + bob; y <= 31; y++) {
@@ -65,8 +66,12 @@
       if (pose === 'cast') { sleeve(cx + 5, sh, cx + 7, 7, false); rect(cx + 6, 4, 3, 3, SKIN); }
       else { sleeve(cx + 5, sh, cx + 6, 23, false); rect(cx + 5, 24, 2, 2, SKIN); }
     } else {
-      sleeve(cx - 3, sh, cx - 4, 22, true);
-      if (pose === 'point') {
+      if (fallen) sleeve(cx - 3, sh, cx - 6, 30, true);            // propped up on one hand
+      else sleeve(cx - 3, sh, cx - 4, 22, true);
+      if (fallen) {
+        sleeve(cx + 3, sh + 1, cx + 9, sh - 3, false);              // ...pointing at you, shaking
+        rect(cx + 10, sh - 4, 2, 3, SKIN); rect(cx + 12, sh - 5, 2, 1, SKIN);
+      } else if (pose === 'point') {
         sleeve(cx + 3, sh + 1, cx + 9, sh + 1, false);
         rect(cx + 10, sh, 2, 3, SKIN); rect(cx + 12, sh, 2, 1, SKIN);      // the pointing finger
       } else if (pose === 'cast') {

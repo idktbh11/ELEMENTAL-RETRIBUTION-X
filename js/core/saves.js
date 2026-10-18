@@ -25,6 +25,7 @@
         skills: Object.assign({ vitality: 0, focus: 0, agility: 0 }, c.skills || {}),
         skillPoints: Number.isInteger(c.skillPoints) ? c.skillPoints : 0,
         gold: Number.isInteger(c.gold) && c.gold > 0 ? c.gold : 0,
+        elementSkills: c.elementSkills && typeof c.elementSkills === 'object' ? Object.fromEntries(Object.entries(c.elementSkills).filter(([k, v]) => /^(m1|s1|s2|s3|ult|block|dash|potency)$/.test(k) && Number.isInteger(v) && v >= 0 && v <= 3)) : {},
         armor: ERX.Armor && ERX.Armor.get(c.armor) ? c.armor : null,
         armorOwned: Array.isArray(c.armorOwned) ? c.armorOwned.filter((id) => ERX.Armor && ERX.Armor.get(id)) : [],
       }));
@@ -87,6 +88,7 @@
         skills: { vitality: 0, focus: 0, agility: 0 },
         skillPoints: 0,
         gold: 0,                             // dropped by monsters, spent at the HQ
+        elementSkills: {},                   // element skill tree ranks (js/screens/skill-tree.js)
         armor: null,                         // equipped armour id (see js/data/armor.js)
         armorOwned: [],
       };

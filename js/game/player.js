@@ -1,6 +1,13 @@
 /*
  * The player character in gameplay.
  * Reads controls ONLY through ERX.Keybinds, so remapped keys just work.
+ *
+ * With an element: the attack button fires your element's M1, ability 1-3
+ * cast its skills, ultimate casts the Ultimate (js/game/abilities.js), and
+ * your block + dash take on the element's look. Without one: fists.
+ * Blocking wears down your GUARD; at zero it breaks and you're stunned.
+ * AWAKENED (js/game/awakening.js): a whole new moveset, a damaging element dash,
+ * and your element's own idle + run animations, blended smoothly every frame.
  */
 (function (ERX) {
   'use strict';
@@ -16,13 +23,14 @@
     dashSpeed: 275, dashTime: 0.16, dashCooldown: 0.55,
     attackTime: 0.3, attackActive: [0.07, 0.17], attackDamage: [6, 9],
     hurtTime: 0.32, invuln: 0.9,
+    guardCost: 20, guardRegen: 30, guardBreakStun: 0.8, guardBreakLock: 2.2,
   };
 
   // pale-blue silhouettes left behind while dashing
   const ghostCache = new Map();
-  function ghostSprite(look, facing) {
-    const key = JSON.stringify(look) + facing;
-    if (!ghostCache.has(key)) ghostCache.set(key, ERX.Sprites.tint(PSide.frame(look, 'dash', 1, facing), '#9ad8ff'));
+  function ghostSprite(look, facing, color) {
+    const key = JSON.stringify(look) + facing + (color || '');
+    if (!ghostCache.has(key)) ghostCache.set(key, ERX.Sprites.tint(PSide.frame(look, 'dash', 1, facing), color || '#9ad8ff'));
     return ghostCache.get(key);
   }
 
@@ -48,7 +56,13 @@
       this.dashLines = [];
       this.ghosts = [];
       this.ghostT = 0;
-      this.stats = { movedLeft: 0, movedRight: 0, jumps: 0, dashes: 0, hits: 0, blocks: 0, platform: false };
+      this.stats = { movedLeft: 0, movedRight: 0, jumps: 0, dashes: 0, hits: 0, blocks: 0, platform: false, guardBreaks: 0 };
+      this.guardMax = 100;
+      this.guard = 100;
+      this.guardBrokenT = 0;
+      this.guardIdleT = 0;
+      this.lungeT = 0;
+      this.ab = new ERX.AbilityState(this);
       this.applySkills();
       this.hp = this.maxHp;
       this.mp = this.maxMp;
@@ -99,6 +113,15 @@
       this.vx = this.vy = 0;
     }
 
+    /** A blocked hit: your element's burst + its sound. */
+    _blockBurst() {
+      const g = this.game, el = g.element(), ak = this.awk(), guard = el && (ak ? ak.guard : ERX.Guards && ERX.Guards[el.id]);
+      const x = this.cx + this.facing * 11, y = this.y + 8;
+      sfx('blockHit', { kind: guard ? guard.sound : 'plain' });
+      if (guard) guard.hit(g, x, y, this.facing, this._blockPal || ERX.Abilities.palette(el, this.kit(), false));
+      else for (let i = 0; i < 8; i++) g.fx.add({ x, y, vx: this.facing * (40 + Math.random() * 80), vy: -60 + Math.random() * 90, life: 0.3, color: '#ffffff', size: 1, fadeOut: 0.2 });
+    }
+
     /** Called by enemies/projectiles. Returns 'blocked' | 'hit' | 'ignored'. */
     /** Dashing makes you intangible: nothing can hit you mid-dash. */
     get intangible() { return this.dashT > 0 || this.dashGrace > 0; }
@@ -114,7 +137,13 @@
       return this._lookA;
     }
 
-    takeHit(damage, fromX) {
+    /** The element kit you're using right now (null before the reveal). */
+    kit() { const el = this.game.element(); if (!el) return null; return this.ab ? this.ab.kit() : ERX.Abilities.kit(el.id); }
+    /** Your awakened kit, if you're awakened right now. */
+    awk() { const el = this.game.element(); return el && this.ab && this.ab.awakened() ? ERX.Awakening.kit(el.id) : null; }
+
+    takeHit(damage, fromX, source) {
+      if (ERX.Admin && ERX.Admin.on() && ERX.Admin.data.god) return 'ignored';
       if (this.intangible) {
         if (!this.dodgeShown) { this.dodgeShown = true; this.game.floatText(this.cx, this.y - 6, 'DODGE!', '#a8f0ff'); }
         return 'ignored';
@@ -124,13 +153,21 @@
         this.blockFlash = 1;
         this.stats.blocks++;
         this.vx = -this.facing * 60;
-        sfx('block');
+        this.guardIdleT = 0;
+        const kit = this.kit(), up = kit && ERX.Abilities.rank(this.game, 'block') >= 2;
+        this.guard -= TUNING.guardCost * (up ? 0.7 : 1);
+        // an upgraded element block bites back
+        if (up && source && source.applyStatus) source.applyStatus(kit.status, ERX.Abilities.rank(this.game, 'potency'));
+        this._blockBurst();
+        if (this.guard <= 0) { this.guardBreak(); return 'blocked'; }
         return 'blocked';
       }
       if (this.invulnT > 0) return 'ignored';
       // armour soaks some of every hit (always at least 1 gets through)
       const armor = ERX.Armor && ERX.Armor.get(this.character.armor);
       if (armor) damage = Math.max(1, damage - armor.def);
+      damage = Math.max(1, Math.round(damage * this.ab.defense()));
+      this.ab.ult = Math.min(100, this.ab.ult + damage * 0.8);
       // nobody dies in the tutorial (the Immortality Stone sees to that, later)
       this.hp = Math.max(this.game.allowDeath ? 0 : 1, this.hp - damage);
       this.hurtT = TUNING.hurtTime;
@@ -141,6 +178,20 @@
       ERX.FX.shake(2, 0.2);
       this.game.floatText(this.cx, this.y - 4, '-' + damage, '#ff6a4f');
       return 'hit';
+    }
+
+    /** Guard hits zero: the block shatters and you're open for a moment. */
+    guardBreak() {
+      this.guard = 0;
+      this.blocking = false;
+      this.guardBrokenT = TUNING.guardBreakLock;
+      this.hurtT = TUNING.guardBreakStun;
+      this.vx = -this.facing * 120;
+      this.stats.guardBreaks++;
+      sfx('shatter');
+      ERX.FX.shake(3, 0.25);
+      this.game.floatText(this.cx, this.y - 10, 'GUARD BREAK!', '#ff6a4f');
+      this.game.sparks(this.cx + this.facing * 10, this.y + 10, 10, -this.facing);
     }
 
     /** Sent flying (cutscenes): no damage, just physics and dignity loss. */
@@ -163,6 +214,12 @@
       this.dashGrace = Math.max(0, (this.dashGrace || 0) - dt);
       this.coyoteT = Math.max(0, this.coyoteT - dt);
       this.bufferT = Math.max(0, this.bufferT - dt);
+      this.ab.update(dt);
+      this.mp = Math.min(this.maxMp, this.mp + dt * 2.5);
+      // guard comes back once you stop getting hit
+      this.guardBrokenT = Math.max(0, this.guardBrokenT - dt);
+      this.guardIdleT += dt;
+      if (this.guardIdleT > 1) this.guard = Math.min(this.guardMax, this.guard + TUNING.guardRegen * dt);
 
       if (this.lying) {
         this.vx = 0;
@@ -174,7 +231,9 @@
       const can = this.controls;
       const left = can && K.isDown('moveLeft'), right = can && K.isDown('moveRight');
       const dir = (right ? 1 : 0) - (left ? 1 : 0);
-      this.blocking = can && K.isDown('block') && this.dashT <= 0 && this.hurtT <= 0;
+      const wasBlocking = this.blocking;
+      this.blocking = can && K.isDown('block') && this.dashT <= 0 && this.hurtT <= 0 && this.guardBrokenT <= 0;
+      if (this.blocking && !wasBlocking) sfx('guardUp', { minGap: 0.15 });
       if (can && K.wasPressed('jump')) this.bufferT = TUNING.buffer;
 
       const wasGround = this.onGround;
@@ -185,10 +244,25 @@
         this.vx = U.approach(this.vx, 0, this.flungT > 0 ? 1.2 : 4, dt);
         this.vy = Math.min(this.vy + TUNING.gravity * dt, TUNING.maxFall);
         this.flungT = Math.max(0, (this.flungT || 0) - dt);
+      } else if (this.ultHold) {
+        this.vx = 0; this.vy = 0;
+        this.ultHold.t = (this.ultHold.t || 0) + dt;
+        if (this.ultHold.t > (this.ultHold.max || 6)) this.ultHold = null;   // failsafe
+      } else if (this.lungeT > 0) {
+        this.lungeT -= dt;          // a lunge attack carries you forward
+        this.vy = 0;
+        if (this.lungeT <= 0) this.vx *= 0.3;
       } else if (this.dashT > 0) {
         this.dashT -= dt;
-        this.vx = this.facing * TUNING.dashSpeed;
+        this.vx = this.facing * TUNING.dashSpeed * (this.dashUp ? 1.2 : 1);
         this.vy = 0;
+        if (!this.awkDash) ERX.Abilities.dashFx(this.game, this);
+        // an upgraded element dash hits whatever you pass through
+        if (this.dashUp && !this.awkDash) {
+          const kit = this.kit();
+          ERX.Abilities.hitWhere(this.game, this.dashHit, (b) => Physics.rectsOverlap(b, { x: this.x - 2, y: this.y, w: this.w + 4, h: this.h }), { dir: this.facing, kb: 0.8 });
+          void kit;
+        }
         this.ghostT -= dt;
         if (this.ghostT <= 0) {
           this.ghostT = 0.03;
@@ -197,7 +271,7 @@
         if (this.dashT <= 0) { this.vx = this.facing * TUNING.speed * this.speedMult; this.dashGrace = 0.06; }
       } else {
         // --- run ---
-        let max = TUNING.speed * this.speedMult;
+        let max = TUNING.speed * this.speedMult * (this.ab && this.ab.awakened() ? 1.12 : 1);   // awakened: a little faster
         if (this.blocking) max *= 0.35;
         if (this.attacking && this.onGround) max *= 0.35;
         if (dir !== 0) {
@@ -228,6 +302,16 @@
           if (dir !== 0) this.facing = dir;
           this.dashT = TUNING.dashTime;
           this.dashCd = TUNING.dashCooldown * this.dashCdMult;
+          const kit = this.kit(), ak = this.awk();
+          this.awkDash = !!ak;
+          this.dashStyle = ak ? 'awk-' + (ak.dash.style || 'none') : kit ? kit.dash[1] : null;
+          this.dashUp = !!kit && ERX.Abilities.rank(this.game, 'dash') >= 2;
+          if (ak) this._awakenedDash(ak);
+          if (this.dashUp) {
+            const el = this.game.element();
+            this.dashHit = { hit: new Set(), hitT: new Map(), t: 0, dmg: 10 * (1 + 0.06 * (this.level - 1)), status: kit.status, potency: ERX.Abilities.rank(this.game, 'potency'), pal: ERX.Abilities.palette(el, kit, true), up: true, x: this.cx };
+          }
+          if (this.dashStyle === 'blink' && !ak) ERX.Abilities.puff(this.game, this.cx, this.y + 10, kit.fx, ERX.Abilities.palette(this.game.element(), kit, this.dashUp), 10, 1.5);
           this.attackT = 0;
           this.stats.dashes++;
           this.dodgeShown = false;
@@ -237,19 +321,36 @@
           this.ghostT = 0;
         }
         // --- attack ---
+        const kit = this.kit();
         if (can && K.wasPressed('attack') && this.attackT <= 0 && !this.blocking && this.dashT <= 0) {
-          this.attackT = TUNING.attackTime;
-          this.swingId++;
-          this.combo = (this.combo + 1) % 3;
-          sfx('swing');
-          if (this.onGround) this.vx += this.facing * 40;
+          if (kit) {
+            // your element's basic attack
+            if (this.ab.cast('m1')) { this.attackT = TUNING.attackTime; this.elementSwing = true; this.swingId++; this.combo = (this.combo + 1) % 3; }
+          } else {
+            this.attackT = TUNING.attackTime;
+            this.elementSwing = false;
+            this.swingId++;
+            this.combo = (this.combo + 1) % 3;
+            sfx('swing');
+            if (this.onGround) this.vx += this.facing * 40;
+          }
+        }
+        if (can && kit && K.wasPressed('awaken')) this.ab.awaken();
+        if (can && kit && !this.blocking && this.dashT <= 0) {
+          if (K.wasPressed('ability1')) { if (this.ab.cast('s1')) this.attackT = TUNING.attackTime; }
+          else if (K.wasPressed('ability2')) { if (this.ab.cast('s2')) this.attackT = TUNING.attackTime; }
+          else if (K.wasPressed('ability3')) { if (this.ab.cast('s3')) this.attackT = TUNING.attackTime; }
+          else if (K.wasPressed('ability4')) { if (this.ab.cast('s4')) this.attackT = TUNING.attackTime; }
+          else if (K.wasPressed('ability5')) { if (this.ab.cast('s5')) this.attackT = TUNING.attackTime; }
+          else if (K.wasPressed('ultimate')) { if (this.ab.cast('ult')) this.attackT = TUNING.attackTime; }
+          if (this.attackT > 0) this.elementSwing = true;
         }
       }
 
       if (this.attackT > 0) {
         this.attackT -= dt;
         const el = TUNING.attackTime - this.attackT;
-        if (el >= TUNING.attackActive[0] && el <= TUNING.attackActive[1]) {
+        if (!this.elementSwing && el >= TUNING.attackActive[0] && el <= TUNING.attackActive[1]) {
           // every target can be hit once per swing (so one punch can hit a crowd)
           const box = { x: this.facing > 0 ? this.x + this.w - 2 : this.x - 16, y: this.y + 1, w: 18, h: 18 };
           const dmg = (this.combo === 2 ? TUNING.attackDamage[1] : TUNING.attackDamage[0]) + Math.floor((this.level - 1) / 2);
@@ -284,14 +385,36 @@
       if (this.dashT > 0 && Math.random() < 0.9) {
         this.dashLines.push({ x: this.cx - this.facing * 8, y: this.y + 3 + Math.random() * (this.h - 6), len: 6 + Math.random() * 10, t: 0.18, facing: this.facing });
       }
-      for (const l of this.dashLines) { l.t -= dt; l.x -= l.facing * 40 * dt; }
+      for (const l of this.awkDash && this.dashT > 0 ? [] : this.dashLines) { l.t -= dt; l.x -= l.facing * 40 * dt; }
       this.dashLines = this.dashLines.filter((l) => l.t > 0);
 
       for (const gh of this.ghosts) gh.t -= dt;
       this.ghosts = this.ghosts.filter((g) => g.t > 0);
+
+      // awakened: your element's idle / run, blended every frame
+      ERX.Awakening.animate(this, dt);
+      const ak = this.awk();
+      if (ak && this.awkState === 'run' && ak.run.step) ak.run.step(ERX.Abilities.api(this.game), this, dt);
+      if (ak && this.awkState === 'idle' && ak.idle.step) ak.idle.step(ERX.Abilities.api(this.game), this, dt);
+    }
+
+    /** Spawn your awakened dash (a custom effect that can hurt things). */
+    _awakenedDash(ak) {
+      const g = this.game, el = g.element(), d = ak.dash;
+      const up = ERX.Abilities.rank(g, 'dash') >= 2;
+      const def = { spawn: d.spawn, update: d.update, draw: d.draw, onEnd: d.onEnd, life: d.life || 0.6, layer: d.layer };
+      const lvl = 1 + 0.06 * (this.level - 1);
+      ERX.Abilities.api(g).spawn({ pal: ERX.Abilities.palette(el, ak, up), dmg: (d.dmg || 12) * lvl * (up ? 1.5 : 1), status: ak.status, potency: ERX.Abilities.rank(g, 'potency'), up, isUlt: false, dir: this.facing, x: this.cx, y: this.y + 10 }, def, {});
     }
 
     pose() {
+      const r = this._pose();
+      this.lastPose = r;
+      return r;
+    }
+    _pose() {
+      if (this.ultHold && typeof this.ultHold.pose === 'string') return [this.ultHold.pose, 0];
+      if (this.cinePose) return [this.cinePose, 0];   // ultimate cutscene
       if (this.lying) return ['lie', 0];
       if (this.hurtT > 0) return ['hurt', 0];
       if (this.dashT > 0) {
@@ -311,9 +434,11 @@
     render(ctx, cam) {
       const ox = -cam.ix, oy = -cam.iy;
       // dash afterimages
+      const elDash = this.game.element && this.game.element();
       for (const g of this.ghosts) {
+        if (this.dashStyle === 'blink' || (this.dashStyle && this.dashStyle.startsWith('awk'))) continue;
         ctx.globalAlpha = (g.t / 0.25) * 0.55;
-        PSide.draw(ctx, ghostSprite(this.look, g.facing), g.x + ox, g.y + oy, g.facing);
+        PSide.draw(ctx, ghostSprite(this.look, g.facing, elDash && this.dashStyle ? (this.dashUp ? (ERX.Abilities.kit(elDash.id).up === 'rainbow' ? '#ffffff' : ERX.Abilities.kit(elDash.id).up) : elDash.color) : null), g.x + ox, g.y + oy, g.facing);
       }
       ctx.globalAlpha = 1;
       // speed lines
@@ -322,11 +447,28 @@
         ctx.fillRect(Math.round(l.facing > 0 ? l.x - l.len : l.x) + ox, Math.round(l.y) + oy, Math.round(l.len), 1);
       }
       if (this.invulnT > 0 && Math.floor(this.invulnT * 20) % 2 === 0 && this.hurtT <= 0) return;
+      if (this.dashT > 0 && (this.dashStyle === 'blink' || this.dashStyle === 'awk-blink')) return;   // teleporting: you're not really there
       const [pose, frame] = this.pose();
-      const cv = PSide.frame(this.look, pose, frame, this.facing);
-      PSide.draw(ctx, cv, Math.round(this.cx) + ox, Math.round(this.feet) + oy, this.facing, pose === 'lie');
-      // block shield shimmer (generic, element-free)
-      if (this.blocking || this.blockFlash > 0) {
+      const ak = this.awk(), A = ak ? ERX.Abilities.api(this.game) : null;
+      const hold = this.ultHold && typeof this.ultHold.pose === 'function' ? this.ultHold.pose(this.ultHold.t || 0) : null;
+      // an awakened dash can bring its own pose (and face the other way: a moonwalk)
+      const dashJ = ak && this.dashT > 0 && ak.dash && ak.dash.pose ? ak.dash.pose(this.dashT, this) : null;
+      const joints = hold || this.cineJoints || dashJ || this.awkJ;
+      const face = dashJ && ak.dash.flip ? -this.facing : this.facing;
+      const lift = (this.cineLift || 0) + (joints && joints.lift ? joints.lift : 0) + (this.ultHold && this.ultHold.lift ? this.ultHold.lift : 0);
+      const cv = joints ? PSide.frameJoints(this.look, joints, face) : PSide.frame(this.look, pose, frame, this.facing);
+      const F = ak ? ERX.Awakening.frameInfo(this, cam, A) : null;
+      // awakened effects behind you (runs leave trails, auras...)
+      if (ak && ak.look && ak.look.back) ak.look.back(ctx, F);
+      if (ak && this.awkState && ak[this.awkState].back) ak[this.awkState].back(ctx, F);
+      PSide.draw(ctx, cv, Math.round(this.cx) + ox, Math.round(this.feet - lift) + oy, joints ? face : this.facing, pose === 'lie' && !joints);
+      // ...and in front (glowing eyes, flames, ice on your cheek...)
+      if (ak && this.awkState && ak[this.awkState].fx) ak[this.awkState].fx(ctx, F);
+      if (ak && ak.look && ak.look.fx) ak.look.fx(ctx, F);
+      // your element's block (a fire ward, a tree, an ice wall...) or the plain shimmer
+      if ((this.blocking || this.blockFlash > 0) && ERX.Abilities.renderBlock(ctx, this, cam, this.blockFlash)) {
+        // drawn
+      } else if (this.blocking || this.blockFlash > 0) {
         const sx = Math.round(this.cx + this.facing * 9) + ox, sy = Math.round(this.y + 2) + oy;
         ctx.fillStyle = this.blockFlash > 0 ? '#ffffff' : 'rgba(200,220,255,0.6)';
         for (let i = 0; i < 18; i++) {
@@ -334,8 +476,16 @@
           if ((i + Math.floor(this.animT * 12)) % 3 !== 0 || this.blockFlash > 0) ctx.fillRect(sx + bend, sy + i, 1, 1);
         }
       }
+      // guard meter (while blocking or recovering)
+      if (this.blocking || this.guard < this.guardMax) {
+        const gw = 16, gx = Math.round(this.cx - gw / 2) + ox, gy = Math.round(this.y - 6) + oy;
+        ctx.fillStyle = '#120c16'; ctx.fillRect(gx - 1, gy - 1, gw + 2, 4);
+        ctx.fillStyle = this.guardBrokenT > 0 ? '#5a2a2a' : '#2a3050'; ctx.fillRect(gx, gy, gw, 2);
+        ctx.fillStyle = this.guardBrokenT > 0 ? '#ff6a4f' : this.guard < 35 ? '#ffb84a' : '#a8d0ff';
+        ctx.fillRect(gx, gy, Math.round(gw * Math.max(0, this.guard) / this.guardMax), 2);
+      }
       // punch swoosh
-      if (this.attackT > 0) {
+      if (this.attackT > 0 && !this.elementSwing) {
         const p = 1 - this.attackT / TUNING.attackTime;
         if (p > 0.2 && p < 0.65) {
           const sx = Math.round(this.cx + this.facing * 12) + ox, sy = Math.round(this.y + 9) + oy;

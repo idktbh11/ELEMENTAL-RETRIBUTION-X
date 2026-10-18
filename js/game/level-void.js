@@ -103,7 +103,7 @@
 
   class HqLevel extends ERX.CaveLevel {
     configure() {
-      this.W = 58;
+      this.W = 64;
       this.H = 18;
       this.pal = PAL;
       this.sections = [];
@@ -116,6 +116,7 @@
       this.floorY = 15 * TS;
       this.spawn = { x: 6 * TS, y: this.floorY };
       this.exit = { x: 4 * TS + 8, y: this.floorY };
+      this.trainingDoor = { x: 60 * TS + 8, y: this.floorY };
       this.checkpoints = [this.spawn];
       this.people = HQ_PEOPLE.map((p) => Object.assign({}, p, { x: Math.round(p.x * TS + 8), y: this.floorY }));
 
@@ -127,7 +128,7 @@
       this.npcs = [];
       this.enemySpawns = [];
       this.lights = [];
-      for (const lx of [8, 18, 28, 38, 48]) this.lights.push({ x: lx * TS + 8, y: 4 * TS + 10, r: 90, color: '#ffd8a0', flicker: false });
+      for (const lx of [8, 18, 28, 38, 48, 58]) this.lights.push({ x: lx * TS + 8, y: 4 * TS + 10, r: 90, color: '#ffd8a0', flicker: false });
       this.lights.push({ x: 4 * TS + 8, y: 12 * TS, r: 40, color: '#b07aff', flicker: false, pulse: true, ref: { phase: 0 } });
     }
 
@@ -248,6 +249,12 @@
       R(54 * TS - 2, fl - 26, 30, 2, '#5e6478');
       for (const wx of [54 * TS, 54 * TS + 22]) { R(wx - 2, fl - 30, 6, 10, '#120c1a'); R(wx - 1, fl - 29, 4, 8, '#3a3e54'); }
       R(54 * TS - 4, fl - 24, 2, 24, '#5e6478'); R(54 * TS + 28, fl - 24, 2, 24, '#5e6478');
+      // the training room door
+      const tx = 60 * TS + 8;
+      R(tx - 14, fl - 48, 28, 48, '#120c1a'); R(tx - 12, fl - 46, 24, 46, '#7a5236'); R(tx - 10, fl - 44, 20, 42, '#5a3a22');
+      R(tx + 6, fl - 24, 2, 3, '#ffd34d');
+      R(tx - 30, fl - 66, 60, 13, '#120c1a'); R(tx - 29, fl - 65, 58, 11, '#c83a3a');
+      F.draw(ctx, 'TRAINING ROOM', tx, fl - 63, { color: '#ffffff', align: 'center' });
       return cv;
     }
 
@@ -283,13 +290,97 @@
     { dx: -0.15, fy: 0.13, r: 9 },
     { dx: 0.14, fy: 0.42, r: 10 },
   ];
-  const ACCENTS = ['#ffffff', '#ff6a4f', '#5ab0ff', '#7af07a', '#ffd34d', '#c86aff', '#1a1430'];
-  const SURFACES = ['spots', 'bands', 'craters', 'swirl', 'crystal', 'molten', 'ring'];
+  // ------------------------------------------------------------ world themes
+  // Every element paints its worlds in its own style (fire = burning worlds, ice =
+  // frozen ones...). World 1 is ALWAYS an ordinary, normal-looking world: it's where
+  // every hero starts (it still has a Julforic Pillar, though).
+  //
+  // A theme: feats = 4 surface styles, pals = 3 palettes [base, accent, glow],
+  // extras = things around the planet. The 6 element worlds mix these, so no two match.
+  //   surface codes: 0 base, 1 accent, 2 glow (lit by itself), 3 bright, 4 dark, 5 black
+  const NORMAL = { feat: 'earthlike', pal: ['#1a5ab0', '#4ab84a', '#ffffff'], extra: 'clouds' };
+  const THEMES = {
+    fire: { feats: ['lava', 'ember', 'storm', 'cracks'], pals: [['#4a1410', '#ff5a1a', '#ffd34d'], ['#7a2010', '#ff9a3a', '#fff0a0'], ['#2a0e0e', '#c83018', '#ff7a2a']], extras: ['flames', '', 'flames', 'ring'] },
+    water: { feats: ['ocean', 'islands', 'storm', 'swirl'], pals: [['#1a4aa8', '#3aa0ff', '#e8f8ff'], ['#0e2a6a', '#2a7ad8', '#7af0ff'], ['#1a6a9a', '#4ac8e8', '#ffffff']], extras: ['clouds', '', 'ring', 'clouds'] },
+    wind: { feats: ['storm', 'swirl', 'bands', 'fog'], pals: [['#5aa0c0', '#e8f8ff', '#ffffff'], ['#3a8ab0', '#9ae8ff', '#ffffff'], ['#a8d8e8', '#ffffff', '#c8f4ff']], extras: ['clouds', 'ring', '', 'clouds'] },
+    earth: { feats: ['rock', 'canyon', 'craters', 'plates'], pals: [['#5a3e22', '#b8864a', '#e8c87a'], ['#3a2a1a', '#8a6a3a', '#c8a070'], ['#6a5a3a', '#a89070', '#5fd84a']], extras: ['', 'moons', 'ring', ''] },
+    lightning: { feats: ['veins', 'storm', 'cracks', 'swirl'], pals: [['#2a2a4a', '#ffd23a', '#ffffff'], ['#1a1a30', '#fff08a', '#ffd23a'], ['#4a3a10', '#ffd23a', '#ffffff']], extras: ['aura', '', 'ring', 'aura'] },
+    ice: { feats: ['ice', 'glacier', 'craters', 'ocean'], pals: [['#a8e8ff', '#ffffff', '#e8f8ff'], ['#4a8ac8', '#a8e8ff', '#ffffff'], ['#d8f4ff', '#7ab8e8', '#ffffff']], extras: ['', 'spikes', 'ring', 'clouds'] },
+    nature: { feats: ['forest', 'jungle', 'islands', 'swirl'], pals: [['#2a7a2a', '#5fd84a', '#ff9ad0'], ['#1a4a1a', '#8ae06a', '#ffd34d'], ['#3a6a2a', '#a8e070', '#ffffff']], extras: ['clouds', '', 'moons', 'clouds'] },
+    darkness: { feats: ['dark', 'swirl', 'cracks', 'fog'], pals: [['#1e1630', '#3a3060', '#ff3a4a'], ['#0e0a18', '#5a4a8a', '#c86aff'], ['#2a1a40', '#120c1a', '#ff3a4a']], extras: ['aura', '', 'ring', ''] },
+    shadow: { feats: ['fog', 'dark', 'bands', 'craters'], pals: [['#22222e', '#4a4a5e', '#6af0ff'], ['#14141c', '#6a6a8a', '#ffffff'], ['#30303e', '#1a1a24', '#6af0ff']], extras: ['', 'aura', '', 'ring'] },
+    light: { feats: ['sun', 'ripples', 'bands', 'crystal'], pals: [['#e8d8a0', '#ffffff', '#ffd34d'], ['#c8b070', '#fff8e0', '#ffffff'], ['#ffe8a0', '#c8a84a', '#ffffff']], extras: ['aura', 'ring', 'aura', ''] },
+    arcane: { feats: ['galaxy', 'ripples', 'crystal', 'veins'], pals: [['#5a2a8a', '#c86aff', '#5affc8'], ['#2a1450', '#a84aff', '#ffffff'], ['#7a3aaa', '#e0a8ff', '#5affc8']], extras: ['ring', 'aura', '', 'ring'] },
+    poison: { feats: ['toxic', 'jungle', 'bands', 'cracks'], pals: [['#4a6a1a', '#9ad83a', '#d8ff6a'], ['#2a3a10', '#6aa82a', '#d84aff'], ['#5a5a1a', '#b0e060', '#ffffff']], extras: ['clouds', '', 'ring', 'aura'] },
+    blood: { feats: ['blood', 'veins', 'ocean', 'craters'], pals: [['#5a0e18', '#c8283a', '#ff6a7a'], ['#2a0408', '#8a1020', '#ff3a4a'], ['#7a1a2a', '#e0404a', '#ffd0d0']], extras: ['', 'aura', 'ring', ''] },
+    death: { feats: ['ash', 'craters', 'cracks', 'fog'], pals: [['#3a3a44', '#8a8aa0', '#7aff9a'], ['#1a1a24', '#5a5a6a', '#7aff9a'], ['#4a4a50', '#c8c8d0', '#9ab0a0']], extras: ['aura', '', 'ring', ''] },
+    metal: { feats: ['plates', 'bands', 'craters', 'crystal'], pals: [['#4a5060', '#b8c0d0', '#ffd34d'], ['#2a2e38', '#8a90a0', '#ffffff'], ['#6a7080', '#e8ecf4', '#ff7a4a']], extras: ['ring', '', 'moons', 'ring'] },
+    sand: { feats: ['dunes', 'canyon', 'craters', 'storm'], pals: [['#a0803a', '#e8c87a', '#fff0c0'], ['#c89a4a', '#f0d898', '#ffffff'], ['#7a5a2a', '#d8b060', '#ff7a4a']], extras: ['', 'ring', '', 'clouds'] },
+    magma: { feats: ['lava', 'cracks', 'rock', 'ember'], pals: [['#2a1410', '#ff7a1a', '#ffe95a'], ['#3a1a10', '#c84010', '#ffd34d'], ['#1a1010', '#ff5a1a', '#ffffff']], extras: ['', 'flames', 'ring', ''] },
+    storm: { feats: ['storm', 'swirl', 'veins', 'fog'], pals: [['#2a3a6a', '#6a8ac8', '#ffffff'], ['#1a2440', '#4a5a7a', '#7affd8'], ['#3a4a7a', '#8ab0e0', '#ffd23a']], extras: ['clouds', 'aura', 'clouds', 'ring'] },
+    cosmic: { feats: ['galaxy', 'swirl', 'craters', 'bands'], pals: [['#1a1050', '#6a5aff', '#ffd34d'], ['#0a0820', '#3a2aa8', '#ffffff'], ['#2a1a6a', '#a89aff', '#ff7ad8']], extras: ['ring', 'aura', 'moons', 'ring'] },
+    void: { feats: ['hole', 'dark', 'ripples', 'cracks'], pals: [['#120820', '#a85cff', '#ffffff'], ['#05030a', '#5a3a8a', '#a85cff'], ['#1a0a2a', '#2a1440', '#ffffff']], extras: ['ring', 'aura', '', 'aura'] },
+    psychic: { feats: ['ripples', 'swirl', 'veins', 'fog'], pals: [['#8a2a7a', '#ff7ad8', '#7affff'], ['#5a1a50', '#ffa0e0', '#ffffff'], ['#a84a9a', '#ffd0f0', '#7affff']], extras: ['aura', 'ring', '', 'aura'] },
+    crystal: { feats: ['crystal', 'glacier', 'craters', 'veins'], pals: [['#2a8a9a', '#7af0e0', '#ffffff'], ['#1a5a6a', '#a0fff0', '#ff7ad8'], ['#4aa8b0', '#e0fffa', '#ffffff']], extras: ['spikes', 'ring', 'spikes', ''] },
+    moon: { feats: ['craters', 'fog', 'bands', 'ripples'], pals: [['#5a5e9a', '#d8dcff', '#ffffff'], ['#3a3e6a', '#a8acd8', '#ff6a8a'], ['#8a8ec0', '#ffffff', '#d8dcff']], extras: ['', 'moons', 'ring', 'aura'] },
+    solar: { feats: ['sun', 'ember', 'bands', 'swirl'], pals: [['#c8601a', '#ffb83a', '#fff0a0'], ['#a8401a', '#ffd34d', '#ffffff'], ['#e08020', '#ffe08a', '#ffffff']], extras: ['flames', 'aura', 'flames', 'ring'] },
+    magnetism: { feats: ['magnet', 'bands', 'ripples', 'plates'], pals: [['#3a4aa8', '#ff4a6a', '#c8ff4a'], ['#2a3a8a', '#ff6a8a', '#ffffff'], ['#5a2a6a', '#4a6aff', '#c8ff4a']], extras: ['ring', 'aura', 'ring', ''] },
+    time: { feats: ['clock', 'ripples', 'bands', 'dunes'], pals: [['#7a6a3a', '#e8d08a', '#ffffff'], ['#4a3a1a', '#c8a85a', '#7ab8ff'], ['#a8904a', '#fff0c0', '#ffffff']], extras: ['ring', '', 'ring', 'aura'] },
+    gravity: { feats: ['swirl', 'craters', 'ripples', 'bands'], pals: [['#2a2240', '#7a6aa8', '#ff5aff'], ['#1a1430', '#5a4a8a', '#ffffff'], ['#3a3060', '#a89ad0', '#ff5aff']], extras: ['ring', 'moons', 'ring', 'aura'] },
+    sound: { feats: ['ripples', 'bands', 'veins', 'storm'], pals: [['#1a7a5a', '#5ae8a8', '#ffffff'], ['#0e4a3a', '#3ac888', '#ff7ad8'], ['#2a9a7a', '#a0ffd8', '#ffffff']], extras: ['aura', 'ring', '', 'aura'] },
+    mist: { feats: ['fog', 'storm', 'ocean', 'swirl'], pals: [['#6a7a8a', '#c8d4e0', '#ffffff'], ['#4a5a6a', '#a8b8c8', '#9a7aff'], ['#8a9aaa', '#e8f0f8', '#ffffff']], extras: ['clouds', 'clouds', '', 'aura'] },
+    spirit: { feats: ['ghost', 'fog', 'ripples', 'swirl'], pals: [['#3a9a9a', '#a8fff0', '#ffffff'], ['#1a5a5a', '#6ae0d0', '#ffd34d'], ['#5ab0b0', '#e0fffa', '#ffffff']], extras: ['aura', '', 'aura', 'ring'] },
+  };
+  const CHAOS_COLS = ['#ff3aa0', '#3affe8', '#ffe93a', '#7a3aff', '#3aff6a', '#ff7a1a', '#3a7aff'];
 
   function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
 
-  function paintPlanet(r, base, accent, surface, seed, locked) {
-    const pad = surface === 'ring' ? Math.round(r * 0.8) : 2;
+  /** What each surface looks like: returns a surface code for one pixel. */
+  function surfaceAt(feat, nx, ny, x, y, noise, craters) {
+    const fbm = (s, o) => noise.fbm2(nx * s + (o || 3), ny * s + (o || 3), 3);
+    const d = Math.sqrt(nx * nx + ny * ny);
+    switch (feat) {
+      case 'earthlike': { const f = fbm(2.2); return Math.abs(ny) > 0.82 ? 3 : f > 0.52 ? (f > 0.62 ? 4 : 1) : 0; }
+      case 'ocean': { const w = Math.sin((ny * 6 + (fbm(2) - 0.5) * 2) * Math.PI); return w > 0.93 ? 3 : w > 0.55 ? 1 : 0; }
+      case 'islands': { const f = fbm(2.6); return f > 0.66 ? 4 : f > 0.57 ? 1 : 0; }
+      case 'lava': { const f = fbm(2.2, 9); return Math.abs(f - 0.5) < 0.05 ? 2 : f > 0.68 ? 1 : 0; }
+      case 'ember': { const f = fbm(2); return noise.n2(nx * 6 + 1, ny * 6 + 1) > 0.74 ? 2 : f > 0.55 ? 1 : 0; }
+      case 'cracks': { const f = fbm(3.2, 5); return Math.abs(f - 0.5) < 0.035 ? 2 : Math.sin(ny * 9) > 0.6 ? 1 : 0; }
+      case 'storm': { const w = Math.sin((ny * 7 + (noise.n2(nx * 2, ny * 2) - 0.5) * 3) * Math.PI); return w > 0.9 ? 3 : w > 0.3 ? 1 : 0; }
+      case 'swirl': { const a = Math.atan2(ny, nx) + d * 4.5; return d < 0.14 ? 4 : Math.sin(a * 2) > 0.3 ? 1 : 0; }
+      case 'bands': { const w = Math.sin(ny * 5 * Math.PI); return Math.abs(w) < 0.12 ? 4 : w > 0 ? 1 : 0; }
+      case 'fog': { const f = fbm(1.6); return f > 0.62 ? 3 : f > 0.5 ? 1 : 0; }
+      case 'rock': { for (const c of craters) { const q = (nx - c.x) ** 2 + (ny - c.y) ** 2; if (q < c.r * c.r) return q > c.r * c.r * 0.55 ? 1 : 4; } return fbm(2.4) > 0.6 ? 1 : 0; }
+      case 'canyon': return Math.abs(Math.sin((nx * 3 + fbm(2) * 2) * Math.PI)) < 0.15 ? 4 : fbm(2.5, 7) > 0.55 ? 1 : 0;
+      case 'craters': { for (const c of craters) { const q = (nx - c.x) ** 2 + (ny - c.y) ** 2; if (q < c.r * c.r) return q > c.r * c.r * 0.6 ? 3 : 4; } return fbm(3) > 0.6 ? 1 : 0; }
+      case 'plates': { const gx = ((x % 5) + 5) % 5, gy = ((y % 5) + 5) % 5; return gx === 0 || gy === 0 ? 4 : gx === 2 && gy === 2 ? 3 : (Math.floor(x / 5) + Math.floor(y / 5)) % 2 ? 1 : 0; }
+      case 'dunes': { const w = Math.sin((ny * 8 + Math.sin(nx * 6) * 0.6) * Math.PI); return w > 0.9 ? 3 : w > 0.35 ? 1 : 0; }
+      case 'veins': { const f = fbm(4, 2); return Math.abs(f - 0.5) < 0.03 ? 2 : fbm(2) > 0.6 ? 1 : 0; }
+      case 'dark': return noise.n2(nx * 9 + 4, ny * 9 + 4) > 0.86 ? 2 : fbm(2) > 0.6 ? 1 : 0;
+      case 'crystal': { const a = Math.floor((nx + ny) * 3), b = Math.floor((nx - ny) * 3); const ex = Math.abs(((nx + ny) * 3) - Math.round((nx + ny) * 3)) < 0.08; return ex ? 3 : (a + b) % 2 === 0 ? 1 : 0; }
+      case 'toxic': return noise.n2(nx * 8 + 2, ny * 8 + 2) > 0.8 ? 2 : fbm(2) > 0.55 ? 1 : 0;
+      case 'jungle': { const f = fbm(2.4); return noise.n2(nx * 9, ny * 9) > 0.88 ? 2 : f > 0.6 ? 4 : f > 0.45 ? 1 : 0; }
+      case 'forest': { const f = fbm(3, 6); return f > 0.62 ? 4 : f > 0.48 ? 1 : noise.n2(nx * 10, ny * 10) > 0.9 ? 2 : 0; }
+      case 'blood': { const f = fbm(2.2, 4); return f > 0.7 ? 2 : Math.abs(f - 0.5) < 0.06 ? 1 : 0; }
+      case 'ash': { const f = fbm(3, 8); return Math.abs(f - 0.5) < 0.03 ? 2 : fbm(2) > 0.55 ? 1 : 0; }
+      case 'galaxy': { const a = Math.atan2(ny, nx) + d * 5; return noise.n2(nx * 11, ny * 11) > 0.88 ? 2 : d < 0.18 ? 3 : Math.sin(a * 2) > 0.5 ? 1 : 0; }
+      case 'hole': return d < 0.42 ? 5 : d < 0.52 ? 2 : Math.sin(Math.atan2(ny, nx) * 3 + d * 8) > 0.4 ? 1 : 0;
+      case 'ripples': { const e = Math.sqrt((nx + 0.3) ** 2 + (ny + 0.2) ** 2), w = Math.sin(e * 12 * Math.PI / 2); return w > 0.85 ? 3 : w > 0.3 ? 1 : 0; }
+      case 'sun': return fbm(2.4) > 0.62 ? 1 : 2;
+      case 'magnet': return Math.abs(Math.sin(ny * 6)) < 0.15 ? 2 : nx < 0 ? 0 : 1;
+      case 'clock': { const a = Math.atan2(ny, nx); if (d > 0.62 && d < 0.72) return 3; if (d > 0.74 && Math.abs(Math.sin(a * 6)) < 0.18) return 3; if ((Math.abs(nx) < 0.06 && ny < 0 && ny > -0.5) || (Math.abs(ny) < 0.06 && nx > 0 && nx < 0.38)) return 2; return d < 0.62 ? 1 : 0; }
+      case 'ghost': { const f = fbm(2, 5); return noise.n2(nx * 7, ny * 7) > 0.82 ? 2 : f > 0.55 ? 1 : 0; }
+      default: return noise.n2(nx * 3, ny * 3) > 0.6 ? 1 : 0;
+    }
+  }
+
+  /**
+   * Paint one world. spec: { r, base, accent, glow, feat, extra, seed, glitch }.
+   * extra: '' | clouds | flames | aura | ring | moons | spikes
+   */
+  function paintPlanet(spec, locked) {
+    const { r, feat, extra, seed } = spec;
+    const pad = extra === 'ring' ? Math.round(r * 0.8) : extra === 'moons' ? Math.round(r * 0.6) + 3 : extra === 'flames' || extra === 'spikes' ? Math.round(r * 0.5) + 2 : extra === 'aura' ? 4 : 2;
     const size = r * 2 + 1 + pad * 2;
     const buf = new PB(size, size);
     const noise = new U.Noise(seed);
@@ -298,62 +389,76 @@
     for (let i = 0; i < 6; i++) craters.push({ x: rng.range(-0.7, 0.7), y: rng.range(-0.7, 0.7), r: rng.range(0.12, 0.3) });
     const o = r + pad;
     const shades = (col) => [C.shade(col, 0.35), col, C.shade(col, -0.3), C.shade(col, -0.55)];
-    const A = shades(base), B = shades(accent);
-    const ringBack = [], ringFront = [];
-    if (surface === 'ring') {
-      for (let a = 0; a < Math.PI * 2; a += 0.01) {
-        for (const k of [1.35, 1.45, 1.55]) {
-          const x = Math.round(Math.cos(a) * r * k), y = Math.round(Math.sin(a) * r * k * 0.28 - Math.cos(a) * r * 0.12);
-          (Math.sin(a) < 0 ? ringBack : ringFront).push([x, y, k === 1.45 ? 0 : 1]);
-        }
-      }
-    }
+    const A = shades(spec.base), B = shades(spec.accent), L = shades(C.mix(spec.accent, '#ffffff', 0.6));
+    const glow = spec.glow, dark = C.shade(spec.base, -0.65);
     const put = (x, y, col) => buf.set(o + x, o + y, c32(locked ? C.mix(C.shade(col, -0.3), '#2a2a4a', 0.3) : col));
+    const lightAt = (x, y) => { const nx = x / r, ny = y / r, nz = Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny)); return U.clamp(-nx * 0.5 - ny * 0.5 + nz * 0.7, 0, 1.2); };
+    // rings (behind)
+    const ringBack = [], ringFront = [];
+    if (extra === 'ring') for (let a = 0; a < Math.PI * 2; a += 0.01) for (const k of [1.35, 1.45, 1.55]) {
+      const x = Math.round(Math.cos(a) * r * k), y = Math.round(Math.sin(a) * r * k * 0.28 - Math.cos(a) * r * 0.12);
+      (Math.sin(a) < 0 ? ringBack : ringFront).push([x, y, k === 1.45 ? 0 : 1]);
+    }
     for (const [x, y, k] of ringBack) put(x, y, B[k + 1]);
+    // flames / an aura / crystal spikes, behind the planet
+    if (extra === 'flames') for (let i = 0; i < 26; i++) {
+      const a = (i / 26) * Math.PI * 2 + rng.range(-0.1, 0.1), len = rng.range(2, r * 0.5);
+      for (let q = 0; q < len; q++) { const w = Math.max(0, 1.6 * (1 - q / len)); for (let s = -w; s <= w; s++) put(Math.round(Math.cos(a) * (r + q) - Math.sin(a) * s), Math.round(Math.sin(a) * (r + q) + Math.cos(a) * s), q / len > 0.55 ? glow : spec.accent); }
+    }
+    if (extra === 'aura') for (let a = 0; a < Math.PI * 2; a += 0.04) { const rr = r + 2 + (Math.round(a * 25) % 2); put(Math.round(Math.cos(a) * rr), Math.round(Math.sin(a) * rr), Math.round(a * 25) % 3 ? glow : spec.accent); }
+    if (extra === 'spikes') for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2 + 0.3, len = r * rng.range(0.3, 0.5);
+      for (let q = 0; q < len + 3; q++) { const w = Math.max(0, 2 * (1 - q / (len + 3))); for (let s = -w; s <= w; s++) put(Math.round(Math.cos(a) * (r - 3 + q) - Math.sin(a) * s), Math.round(Math.sin(a) * (r - 3 + q) + Math.cos(a) * s), s < 0 ? L[0] : B[1]); }
+    }
+    // the planet itself
     for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) {
       const d2 = x * x + y * y;
       if (d2 > r * r) continue;
-      const nx = x / r, ny = y / r, nz = Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny));
-      const light = U.clamp(-nx * 0.5 - ny * 0.5 + nz * 0.7, 0, 1.2);
-      let mixAcc = 0;
-      switch (surface) {
-        case 'spots': mixAcc = noise.fbm2(nx * 2.4 + 3, ny * 2.4 + 3, 3) > 0.52 ? 1 : 0; break;
-        case 'bands': mixAcc = Math.sin((ny * 5 + (noise.n2(nx * 2, ny * 2) - 0.5) * 1.6) * Math.PI) > 0.2 ? 1 : 0; break;
-        case 'craters': for (const c of craters) if ((nx - c.x) ** 2 + (ny - c.y) ** 2 < c.r * c.r) mixAcc = 1; break;
-        case 'swirl': { const a = Math.atan2(ny, nx) + Math.sqrt(nx * nx + ny * ny) * 4; mixAcc = Math.sin(a * 2) > 0.3 ? 1 : 0; break; }
-        case 'crystal': mixAcc = (Math.floor((nx + ny) * 3) + Math.floor((nx - ny) * 3)) % 2 === 0 ? 1 : 0; break;
-        case 'molten': mixAcc = Math.abs(noise.fbm2(nx * 2 + 9, ny * 2 + 9, 3) - 0.5) < 0.05 ? 2 : 0; break;
-        default: mixAcc = noise.n2(nx * 3, ny * 3) > 0.6 ? 1 : 0;
-      }
+      const nx = x / r, ny = y / r;
+      const light = lightAt(x, y);
+      let code = surfaceAt(feat, nx, ny, x, y, noise, craters);
+      if (extra === 'clouds' && code !== 2 && noise.fbm2(nx * 2.6 + 40, ny * 5 + 40, 2) > 0.65) code = 3;
       const lv = light + (ERX.bayer(x + o, y + o) - 0.5) * 0.25;
       const k = lv > 0.95 ? 0 : lv > 0.55 ? 1 : lv > 0.2 ? 2 : 3;
-      let col = mixAcc === 2 ? '#ffd36a' : (mixAcc ? B : A)[k];
-      if (d2 > (r - 1) * (r - 1) && nx + ny < 0) col = C.shade(col, 0.3);   // lit atmosphere rim
-      put(x, y, col);
+      let col = code === 2 ? (lv > 0.9 ? C.mix(glow, '#ffffff', 0.4) : glow) : code === 5 ? '#05030a' : code === 4 ? (k < 2 ? C.shade(dark, 0.2) : dark) : (code === 3 ? L : code === 1 ? B : A)[k];
+      if (code !== 2 && code !== 5 && d2 > (r - 1) * (r - 1) && nx + ny < 0) col = C.shade(col, 0.3);   // lit atmosphere rim
+      if (spec.glitch && ((y + seed) % 7 === 0)) col = CHAOS_COLS[(Math.abs(x) + seed) % CHAOS_COLS.length];   // reality tearing
+      put(spec.glitch && ((y + seed) % 5 === 0) ? x + 2 : x, y, col);
     }
     for (const [x, y, k] of ringFront) put(x, y, B[k]);
+    // a little moon
+    if (extra === 'moons') {
+      const mr = Math.max(2, Math.round(r * 0.25)), mx = r + Math.round(pad * 0.5), my = -Math.round(r * 0.55);
+      for (let y = -mr; y <= mr; y++) for (let x = -mr; x <= mr; x++) if (x * x + y * y <= mr * mr) put(mx + x, my + y, x + y < 0 ? L[1] : B[2]);
+    }
     buf.outline(c32('#05040f'));
     return buf.toCanvas();
   }
 
+  /** The look of world i for an element. */
+  function worldSpec(el, i, s, seed) {
+    if (i === 0 || !el) return Object.assign({ r: s.r, seed: 1337 + i * 97 }, NORMAL,   // world 1 is the same planet for every hero
+      { base: NORMAL.pal[0], accent: NORMAL.pal[1], glow: NORMAL.pal[2] });   // world 1: always normal
+    const j = i - 1;
+    if (el.id === 'chaos') {
+      // Chaos worlds borrow other elements' styles, in clashing colours, with reality tearing through them
+      const ids = Object.keys(THEMES), th = THEMES[ids[(seed + i * 7) % ids.length]];
+      return { r: s.r, seed: seed + i * 97, feat: th.feats[j % 4], extra: th.extras[j % th.extras.length], base: CHAOS_COLS[i % 7], accent: CHAOS_COLS[(i + 3) % 7], glow: '#ffffff', glitch: true };
+    }
+    const th = THEMES[el.id];
+    if (!th) return Object.assign({ r: s.r, seed: seed + i * 97 }, NORMAL, { base: el.color, accent: el.world.tint, glow: '#ffffff' });
+    const p = th.pals[j % th.pals.length];
+    return { r: s.r, seed: seed + i * 97, feat: th.feats[j % th.feats.length], extra: th.extras[(j + Math.floor(j / 4)) % th.extras.length], base: p[0], accent: p[1], glow: p[2] };
+  }
+
   ERX.Worlds = {
+    THEMES, NORMAL,
     /** The 7 worlds for an element (same element, same worlds; different element, different worlds). */
     build(el) {
       const seed = hashStr(el ? el.id : 'none');
-      const rng = new U.RNG(seed);
-      const surfaces = SURFACES.slice();
-      for (let i = surfaces.length - 1; i > 0; i--) { const j = rng.int(0, i); [surfaces[i], surfaces[j]] = [surfaces[j], surfaces[i]]; }
-      const base = el ? el.color : '#8a8aa8';
-      const tint = el ? el.world.tint : '#c8c8e0';
       return SPOTS.map((s, i) => {
-        const b = C.mix(base, ACCENTS[i], i === 0 ? 0 : 0.28);
-        const a = C.mix(tint, ACCENTS[(i + 3) % 7], 0.35);
-        const surface = surfaces[i];
-        return Object.assign({}, s, {
-          i, surface,
-          cv: paintPlanet(s.r, b, a, surface, seed + i * 97, false),
-          cvLocked: paintPlanet(s.r, b, a, surface, seed + i * 97, true),
-        });
+        const spec = worldSpec(el, i, s, seed);
+        return Object.assign({}, s, { i, surface: spec.feat, spec, cv: paintPlanet(spec, false), cvLocked: paintPlanet(spec, true) });
       });
     },
   };

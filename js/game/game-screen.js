@@ -26,6 +26,8 @@
 
   const STAGES = ['new', 'tutorialDone', 'enemiesCleared', 'deepEnds', 'reachedEnd', 'awakened', 'worldUnlocked'];
   const ORB_LIGHTS = ['#ff5a5a', '#ffb84a', '#ffe95a', '#6aff8a', '#5ac8ff', '#b07aff'];
+  // ability effects drawn behind characters (things on the ground)
+  const BACK_FX = { zone: true, vortex: true, aura: true, spikes: true, pillar: true, turret: true };
   const stageIndex = (s) => Math.max(0, STAGES.indexOf(s));
 
   const WAKE_THOUGHTS = [
@@ -78,7 +80,7 @@
     loadLevel(id, opts = {}) {
       const seed = (Date.now() >>> 0) ^ (id === 'cave' ? 0x1234 : 0x5678);
       this.levelId = id;
-      const Level = { cave: ERX.CaveLevel, vault: ERX.VaultLevel, void: ERX.VoidLevel, hq: ERX.HqLevel }[id] || ERX.DeepEndsLevel;
+      const Level = { cave: ERX.CaveLevel, vault: ERX.VaultLevel, void: ERX.VoidLevel, hq: ERX.HqLevel, training: ERX.TrainingLevel }[id] || ERX.DeepEndsLevel;
       this.level = new Level(seed);
       this.backWall = this.level.renderBackWall ? this.level.renderBackWall() : null;
       this.frontLayer = this.level.renderFront ? this.level.renderFront() : null;
@@ -117,6 +119,8 @@
       this.launch = null;
       this.float = null;
       this.ripples = [];
+      this.effects = [];
+      this.cine = null;
       this.transitioning = false;
       this.dialogue.close();
 
@@ -211,11 +215,22 @@
         this.stageName = 'hq';
         this.darkness = 0.18;
         this.hudAlpha = 1;
-        p.placeAt(L.spawn.x, L.floorY);
+        p.placeAt(opts.at === 'training' ? L.trainingDoor.x - 22 : L.spawn.x, L.floorY);
         for (const n of L.people) this.npcs.push(Object.assign({ talkIndex: 0, t: Math.random() * 3, facing: -1 }, n));
         ERX.Audio.playMusic('hq');
         ERX.Audio.setAmbience(null);
-        this.banner = { title: 'HERO HQ', sub: 'Staff: questionable. Coffee: imaginary.', t: 0, dur: 3.5 };
+        if (opts.at !== 'training') this.banner = { title: 'HERO HQ', sub: 'Staff: questionable. Coffee: imaginary.', t: 0, dur: 3.5 };
+      } else if (id === 'training') {
+        const L = this.level;
+        this.stageName = 'training';
+        this.darkness = 0.12;
+        this.hudAlpha = 1;
+        this.allowDeath = true;
+        p.placeAt(L.spawn.x, L.floorY);
+        for (const s of L.enemySpawns) this.enemies.push(ERX.Enemies.create(this, s));
+        ERX.Audio.playMusic('onward');
+        ERX.Audio.setAmbience(null);
+        this.banner = { title: 'TRAINING ROOM', sub: 'Hit stuff. Learn stuff. The dummies signed waivers.', t: 0, dur: 3.5 };
       } else {
         const L = this.level;
         const at = opts.at === 'hall' ? L.checkpoints[L.checkpoints.length - 1] : opts.at === 'elevator' ? { x: L.elevator.x0 - 24, y: L.elevator.floorY } : L.spawn;
@@ -329,8 +344,10 @@
     }
 
     onEnemyKilled(e) {
+      if (!e.xp) return;
       const ups = this.player.gainXp(e.xp);
       this.floatText(e.cx, e.y - 14, '+' + e.xp + ' XP', '#a8f0ff');
+      if (ups) { this.character.skillPoints = (this.character.skillPoints || 0) + ups; ERX.Saves.update(this.character); }
       if (e.gold) {
         this.character.gold = (this.character.gold || 0) + e.gold;
         ERX.Saves.update(this.character);
@@ -340,7 +357,7 @@
       if (ups) {
         sfx('levelUp');
         this.floatText(this.player.cx, this.player.y - 18, 'LEVEL UP!', '#ffd34d');
-        ERX.Toast.show('LEVEL ' + this.player.level + '! +5 MAX HP, harder punches.', { color: '#ffd34d' });
+        ERX.Toast.show('LEVEL ' + this.player.level + '! +5 MAX HP, +1 SKILL POINT.', { color: '#ffd34d' });
         for (let i = 0; i < 20; i++) this.fx.add({ x: this.player.cx, y: this.player.y + 10, vx: U.lerp(-60, 60, Math.random()), vy: U.lerp(-140, -40, Math.random()), ay: 120, life: 1, color: i % 2 ? '#ffd34d' : '#ffffff', size: 1, fadeOut: 0.5 });
       }
     }
@@ -365,7 +382,12 @@
 
     // ------------------------------------------------ the orb + the reveal
     awakened() { return stageIndex(this.stage()) >= stageIndex('awakened'); }
-    element() { return ERX.Elements.get(this.character.element); }
+    /** The element you're playing with: yours, or the admin panel's pick (testing only, never saved). */
+    element() {
+      const A = ERX.Admin;
+      if (A && A.on() && A.data.element) return ERX.Elements.get(A.data.element);
+      return ERX.Elements.get(this.character.element);
+    }
     addShockwave(x, y, r, dur) { this.shockwaves.push(new Shockwave(x, y, r, dur)); }
 
     startNebula() {
@@ -385,7 +407,29 @@
       ERX.Audio.cutMusic();
       ERX.Audio.setAmbience(null);
       if (!ERX.Elements.get(this.character.element)) this.character.element = ERX.Elements.random().id;
+      this._freshStart();
       this.saveProgress('awakened');
+    }
+
+    /**
+     * Getting your element is a brand-new start: the tutorial's levels, XP, skill
+     * points, stats and gold are all gone. (Achievements stay; they're device-wide.)
+     */
+    _freshStart() {
+      const c = this.character, p = this.player;
+      c.level = 1;
+      c.xp = 0;
+      c.skills = { vitality: 0, focus: 0, agility: 0 };
+      c.elementSkills = {};
+      c.skillPoints = 0;
+      c.gold = 0;
+      c.armor = null;
+      c.armorOwned = [];
+      p.hp = 0; p.mp = 0;
+      p.applySkills();
+      p.hp = p.maxHp; p.mp = p.maxMp;
+      p.ab = new ERX.AbilityState(p);
+      this.hpShown = p.hp;
     }
 
     /** Sparks out of the element art. `rarity`: a second burst in the rarity colour (rainbow for MYTHIC). */
@@ -586,6 +630,17 @@
       }
     }
 
+    /** Skipping the tutorial (you've beaten it before): straight to the Deep Ends elevator. */
+    skipToElevator() {
+      if (this.transitioning) return;
+      this.transitioning = true;
+      this.player.controls = false;
+      sfx('pop');
+      this.flashT = 0.4;
+      this.saveProgress('reachedEnd');
+      ERX.Scenes.transition('dissolve', 1.4, () => this.loadLevel('deep', { at: 'elevator' }));
+    }
+
     goDeeper() {
       if (this.transitioning) return;
       this.transitioning = true;
@@ -613,6 +668,14 @@
         input.consumeAction('back');
         ERX.Audio.playSfx('select');
         ERX.Scenes.push('pause', { game: this });
+        return;
+      }
+      // an ultimate's cutscene: the world holds its breath
+      if (this.cine) {
+        this.cine.update(dt);
+        for (const f of this.floats) { f.t += dt; f.y -= (f.rise || 20) * dt; }
+        this.floats = this.floats.filter((f) => f.t < (f.dur || 0.9));
+        this.flashT = Math.max(0, (this.flashT || 0) - dt);
         return;
       }
       if (this.state === 'play' && this.player.controls) {
@@ -657,6 +720,8 @@
         for (const s of this.shockwaves) s.update(dt);
         this.shockwaves = this.shockwaves.filter((s) => !s.done);
         if (this.levelId === 'void') this._updateVoid(dt);
+        for (const fx of this.effects) fx.update(dt);
+        this.effects = this.effects.filter((fx) => !fx.dead);
       }
       this.fx.update(dt);
       this.confetti.update(dt);
@@ -855,6 +920,16 @@
           return;
         }
       }
+      if (this.levelId === 'hq' && Math.abs(p.cx - this.level.trainingDoor.x) < 14) {
+        this.prompt = { x: this.level.trainingDoor.x, y: this.level.floorY - 64, text: '{use} TRAINING ROOM' };
+        if (K.wasPressed('use')) { sfx('doorOpen'); p.controls = false; this.travel('training'); }
+        return;
+      }
+      if (this.levelId === 'training' && Math.abs(p.cx - this.level.exit.x) < 14) {
+        this.prompt = { x: this.level.exit.x, y: this.level.floorY - 64, text: '{use} BACK TO THE HQ' };
+        if (K.wasPressed('use')) { sfx('doorOpen'); p.controls = false; this.travel('hq', { at: 'training' }); }
+        return;
+      }
       if (this.levelId === 'hq' && Math.abs(p.cx - this.level.exit.x) < 14) {
         this.prompt = { x: this.level.exit.x, y: this.level.floorY - 64, text: '{use} BACK TO THE VOID' };
         if (K.wasPressed('use')) { sfx('doorOpen'); p.controls = false; this.travel('void', { at: 'door' }); }
@@ -943,11 +1018,14 @@
       if (this.orb) this.orb.render(c, cam);
       for (const n of this.npcs) this._drawNpc(c, cam, n);
       if (this.levelId === 'void') this._renderVoidThings(c, cam);
+      for (const fx of this.effects) if (BACK_FX[fx.kind]) fx.render(c, cam);
       if (this.dummy) this.dummy.render(c, cam);
       for (const e of this.enemies) e.render(c, cam);
       for (const b of this.bolts) b.render(c, cam);
       if (this.state === 'launch') this._renderLaunch(c, cam);
       else this.player.render(c, cam);
+      for (const fx of this.effects) if (!BACK_FX[fx.kind] && fx.layer !== 'screen') fx.render(c, cam);
+      for (const fx of this.effects) if (fx.layer === 'screen') { if (fx.kind === 'custom') fx.render(c, cam); else ERX.Abilities.renderScreen(c, fx, vw, vh); }
       if (this.frontLayer) c.drawImage(this.frontLayer, -cam.ix, -cam.iy);
       if (this.levelId === 'void') this._renderVoidFx(c, cam);
       for (const s of this.shockwaves) s.render(c, cam);
@@ -955,10 +1033,22 @@
       this.confetti.render(c, -cam.ix, -cam.iy);
       for (const f of this.floats) F.draw(c, f.text, f.x - cam.ix, f.y - cam.iy, { color: f.color, outline: T.ink, align: 'center', alpha: f.dur ? U.clamp((f.dur - f.t) / 0.6, 0, 1) : 1 - f.t / 0.9 });
       this.lighting.render(c, cam, vw, vh, this.darkness, this._lights());
+      ERX.ChaosWorld.render(c, this, vw, vh);
       if (this.flashT > 0) { c.fillStyle = 'rgba(255,255,255,' + Math.min(0.85, this.flashT * 2.5).toFixed(3) + ')'; c.fillRect(0, 0, vw, vh); }
       if (this.state === 'dead') {
         c.fillStyle = 'rgba(40,0,10,' + Math.min(0.5, this.deadT * 0.4).toFixed(3) + ')';
         c.fillRect(0, 0, vw, vh);
+      }
+      if (this.cine) {
+        // zoomed in on you (the ultimate cutscene)
+        this.cine.drawWorld(c, cam);
+        const z = this.cine.zoom(), sw = vw / z, sh = vh / z;
+        const px = this.player.cx - cam.ix, py = this.player.y + 6 - (this.player.cineLift || 0) - cam.iy;
+        const sx = U.clamp(px - sw / 2, 0, vw - sw), sy = U.clamp(py - sh / 2, 0, vh - sh);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(this.view, sx, sy, sw, sh, 0, 0, vw * this.zoom, vh * this.zoom);
+        this.cine.drawScreen(ctx, W, H);
+        return;
       }
       ctx.drawImage(this.view, 0, 0, vw * this.zoom, vh * this.zoom);
 
