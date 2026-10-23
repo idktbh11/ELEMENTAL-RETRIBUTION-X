@@ -166,7 +166,8 @@
       if (this._erased) return;   // erased from existence for a moment (Void's Zero Point)
       const cv = this.sprite();
       const x = Math.round(this.cx - cv.width / 2) - cam.ix, y = Math.round(this.y + this.h - cv.height + this.drawOffset) - cam.iy;
-      ctx.drawImage(cv, x, y);
+      if (this._glitchUntil > this.game.t) glitchDraw(ctx, cv, x, y);   // glitched out (awakened Chaos)
+      else ctx.drawImage(cv, x, y);
       if (this.flash > 0) {
         ctx.globalAlpha = this.flash;
         ctx.drawImage(whiteOf(cv), x, y);
@@ -190,6 +191,15 @@
         ctx.fillStyle = '#e0403a'; ctx.fillRect(bx, by, Math.max(1, Math.round(bw * this.hp / this.maxHp)), 2);
       }
     }
+  }
+
+  /** A glitching sprite: colour-split ghosts and slices that jump sideways. */
+  const tints = new WeakMap();
+  function tintOf(cv, col) { let m = tints.get(cv); if (!m) { m = {}; tints.set(cv, m); } return m[col] || (m[col] = ERX.Sprites.tint(cv, col)); }
+  function glitchDraw(ctx, cv, x, y) {
+    const j = () => Math.round((Math.random() - 0.5) * 6);
+    ctx.save(); ctx.globalAlpha *= 0.7; ctx.drawImage(tintOf(cv, '#ff2adf'), x - 2 + j() / 3, y); ctx.drawImage(tintOf(cv, '#2affff'), x + 2 + j() / 3, y); ctx.restore();
+    for (let sy = 0; sy < cv.height; sy += 3) { const h = Math.min(3, cv.height - sy), dx = Math.random() < 0.35 ? j() : 0; ctx.drawImage(Math.random() < 0.08 ? tintOf(cv, '#ffffff') : cv, 0, sy, cv.width, h, x + dx, y + sy, cv.width, h); }
   }
 
   function whiteOf(cv) {

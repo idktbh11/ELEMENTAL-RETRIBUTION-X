@@ -33,6 +33,7 @@
   function renderAwakening(ctx, g, cx, cy, r, ak, el) {
     const ab = g.player.ab, t = g.t, kit = ERX.Awakening.kit(el.id);
     if (!kit) return;
+    if (!ERX.Awakening.unlocked(g) && !ab.awakened() && ab.awk <= 0) return;   // not earned yet: no ring at all
     const awkCol = kit.color, C = ERX.Color;
     const frac = ak ? ab.awakenT / ERX.Awakening.TIME : ab.awk / 100, ready = !ak && ab.awk >= 100;
     ctx.save();
@@ -59,7 +60,7 @@
   }
 
   function renderAbilities(ctx, W, H, g) {
-    const p = g.player, kit = p.kit(), ab = p.ab, el = g.element(), Sy = ERX.Symbols, t = g.t;
+    const p = g.player, ab = p.ab, el = g.element(), Sy = ERX.Symbols, t = g.t;
     const L = wheelLayout(H), C = ERX.Color;
     // awakened: the wheel switches to the awakened moves, in the awakened colour
     const ak = p.awk ? p.awk() : null, col = ak ? ak.color : el.color;
@@ -71,7 +72,7 @@
       disc(ctx, s.x, s.y, WHEEL.r, locked ? '#12142a' : C.shade(col, -0.72));
       Sy.move(ctx, el.id, s.slot, s.x, s.y, 1, { dim: locked, t, awakened: !!ak, color: ak ? col : null });
       if (!locked && ab.cd[s.slot] > 0) {
-        const k = ab.cd[s.slot] / ERX.Abilities.stats(kit, s.slot).cd;
+        const k = ab.cdFrac(s.slot);
         ctx.beginPath(); ctx.moveTo(s.x + 0.5, s.y + 0.5); ctx.arc(s.x + 0.5, s.y + 0.5, WHEEL.r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k); ctx.closePath();
         ctx.fillStyle = 'rgba(5,4,12,0.62)'; ctx.fill();
       }

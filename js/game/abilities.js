@@ -10,8 +10,9 @@
  * `kind` picks a built-in behaviour (or 'custom' with its own spawn/update);
  * every move brings its OWN draw function, so no two moves look alike.
  * `A` (Abilities.api) is the toolkit moves use: drawing, hitting, spawning.
- * An UPGRADED move: stronger, bigger, extra hits, and it changes colour to
- * the kit's `up` colour (plus a white-hot core), so it looks very different.
+ * An UPGRADED move keeps its element's colours but is stronger, bigger, faster (shorter cooldown, quicker
+ * projectiles) and more detailed (its own glow layer, a trail, bursts on hit). Upgrading the M1 swaps it for
+ * the kit's m1Up - a whole new move - and upgrading the dash adds the kit's dashUp.
  * Ultimates play a cutscene first (js/game/ultimate.js), then run.
  */
 (function (ERX) {
@@ -104,11 +105,13 @@
     return '#' + f(0) + f(8) + f(4);
   }
 
-  /** Colours for an element's moves; `up` = the upgraded look. */
+  /**
+   * Colours for an element's moves. Upgrading never changes the colour (up = the same colours, a brighter core):
+   * upgraded moves are bigger, stronger, faster and more detailed instead.
+   */
   function palette(el, kit, up) {
     let base = kit.color || el.color;                 // awakened kits bring their own colour
-    if (up) base = kit.up === 'rainbow' ? toHex(rainbowColor(Math.random() * 3)) : kit.up;
-    if (!up && kit === KITS_CHAOS()) base = toHex(rainbowColor(Math.random() * 3));
+    if (kit === KITS_CHAOS()) base = toHex(rainbowColor(Math.random() * 3));
     return { c: base, d: C.shade(base, -0.45), l: C.mix(base, '#ffffff', 0.5), core: up ? '#ffffff' : C.mix(base, '#ffffff', 0.25), up: !!up, fx: kit.fx };
   }
   function KITS_CHAOS() { return ERX.Kits.chaos; }
@@ -165,20 +168,76 @@
     return best;
   }
 
-  /** Damage one target with a move (applies status, builds Ultimate charge). */
-  function damage(game, tg, dmg, dir, e, kb) {
+  /** Damage one target with a move (applies status, builds Ultimate charge). splash: this hit is itself a splash (it won't splash again). */
+  function damage(game, tg, dmg, dir, e, kb, splash) {
     dmg = Math.max(1, Math.round(dmg));
+    if (e.el && ERX.ElementSfx && !splash) ERX.ElementSfx.hit(e.el, dmg, !!e.isAwk, !!e.isUlt);
     const p = game.player;
     if (tg.tutorial) { tg.tutorial.hit(dmg, dir, false); return; }
     const crit = e.up && Math.random() < 0.15;
     tg.hurt(crit ? Math.round(dmg * 1.5) : dmg, dir, crit, kb === undefined ? (e.kb !== undefined ? e.kb : 1) : kb);
     if (!tg.dead && e.status && tg.applyStatus) tg.applyStatus(e.status, e.potency || 0);
+    if (e.pal) hitFx(game, tg, dmg, e, splash);
+    if (e.isAwk) awkJuice(game, tg, dmg, e);
+    if (e.isAwk && !e.isUlt && !splash) awkSplash(game, tg, dmg, e);
     if (p.ab) {
       p.ab.ult = Math.min(100, p.ab.ult + (e.isUlt ? 0 : dmg * 0.55));
       // the Awakening meter fills more slowly (and not while you're already awakened)
-      if (!p.ab.awakened() && !e.isUlt && game.element && game.element()) p.ab.awk = Math.min(100, p.ab.awk + dmg * ERX.Awakening.FILL);
+      if (!p.ab.awakened() && !e.isUlt && game.element && game.element() && ERX.Awakening.unlocked(game)) p.ab.awk = Math.min(100, p.ab.awk + dmg * ERX.Awakening.FILL);
     }
   }
+
+  /** Awakened hits land harder: sparks in your colours, a jolt, a freeze-frame on big ones, an impact frame on an Ultimate's finisher. */
+  function awkJuice(game, tg, dmg, e) {
+    const c = centerOf(tg), col = (e.pal && e.pal.l) || '#ffffff', n = Math.min(12, 3 + Math.round(dmg / 6)), now = game.t || 0;
+    for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, sp = 60 + Math.random() * (80 + dmg * 2); game.fx.add({ x: c.x, y: c.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 30, life: 0.25 + Math.random() * 0.25, color: i % 3 ? col : '#ffffff', size: dmg > 25 && i % 4 === 0 ? 2 : 1, fadeOut: 0.2 }); }
+    // (rate-limited, so a stream of small hits never turns into a stutter)
+    if (dmg >= 8 && now - (game._awkJolt || -9) > 0.1) { game._awkJolt = now; ERX.FX.shake(Math.min(3.5, 0.6 + dmg / 25), 0.1); }
+    if (e.isUlt ? dmg >= 30 && now - (game._awkStop || -9) > 0.35 : dmg >= 14 && now - (game._awkStop || -9) > 0.18) { game._awkStop = now; game.hitStop = Math.max(game.hitStop || 0, e.isUlt ? Math.min(0.08, 0.03 + dmg / 2000) : Math.min(0.06, 0.025 + dmg / 1500)); }
+    if (e.isUlt && dmg >= 45 && now - (game._awkImpact || -9) > 1 && game.impact) { game._awkImpact = now; game.impact(0.09); }
+  }
+
+  // ------------------------------------------------- making hits land
+  /** A flash, a ring and a burst of streaks wherever an element move connects. */
+  const HITFX = {
+    life: 0.22,
+    draw(e, ctx, ox, oy, A) {
+      const k = e.t / e.life, x = e.x + ox, y = e.y + oy, R = e.r;
+      if (e.t < 0.05) A.disc(ctx, x, y, Math.max(1, Math.round(R * 0.55)), '#ffffff');
+      A.alpha(ctx, 1 - k, () => {
+        A.ring(ctx, x, y, R * (0.4 + k), e.pal.l, R * (0.4 + k));
+        for (let i = 0; i < 6; i++) { const a = e.a0 + i * 1.047, r0 = R * 0.5 * (1 + k), r1 = R * (0.9 + k); A.line(ctx, x + Math.cos(a) * r0, y + Math.sin(a) * r0, x + Math.cos(a) * r1, y + Math.sin(a) * r1, i % 2 ? e.pal.c : '#ffffff'); }
+      });
+    },
+  };
+  function hitFx(game, tg, dmg, e, splash) {
+    const now = game.t || 0;
+    if (now - (tg._hfx || -9) < 0.06) return;
+    tg._hfx = now;
+    const c = centerOf(tg), r = Math.min(18, (e.isAwk ? 7 : 5) + dmg / 6) * (splash ? 0.7 : 1);
+    if ((e.isAwk || e.up) && !e.isUlt) puff(game, c.x, c.y, e.pal.fx, e.pal, splash ? 3 : e.isAwk ? 6 : 4, 1.3);
+    add(game, HITFX, { x: c.x + (Math.random() - 0.5) * 6, y: c.y + (Math.random() - 0.5) * 6, pal: e.pal, r, a0: Math.random() * 6, isAwk: e.isAwk && !e.isUlt, juice: true });
+  }
+  /** A quick ring showing a splash spreading out. */
+  const SPLASHFX = { life: 0.28, draw(e, ctx, ox, oy, A) { const k = e.t / e.life; A.alpha(ctx, 1 - k, () => { A.ring(ctx, e.x + ox, e.y + oy, e.r * (0.3 + k * 0.7), e.pal.c, e.r * (0.3 + k * 0.7) * 0.6, 2); A.ring(ctx, e.x + ox, e.y + oy, e.r * (0.2 + k * 0.6), '#ffffff', e.r * (0.2 + k * 0.6) * 0.6, 3); }); } };
+  /** Awakened moves are built for crowds: every hit splashes onto everything near what it hit. */
+  function awkSplash(game, tg, dmg, e) {
+    const c = centerOf(tg), R = 34 * (e.up ? 1.3 : 1), now = e.t || 0;
+    if (!e._splash) e._splash = new Map();
+    let any = false;
+    for (const o of targets(game)) {
+      if (o === tg || o.tutorial || o.dead) continue;
+      const oc = centerOf(o);
+      if (Math.hypot(oc.x - c.x, oc.y - c.y) > R) continue;
+      const last = e._splash.get(o.uid);
+      if (last !== undefined && now - last < 0.25) continue;
+      e._splash.set(o.uid, now); any = true;
+      damage(game, o, dmg * 0.45, oc.x >= c.x ? 1 : -1, e, 0.5, true);
+    }
+    if (any) add(game, SPLASHFX, { x: c.x, y: c.y, pal: e.pal, r: R, isAwk: true, juice: true });
+  }
+  /** The burst at the end of an awakened M1 combo. */
+  const FINISHFX = { life: 0.35, draw(e, ctx, ox, oy, A) { const k = e.t / e.life, x = e.x + ox, y = e.y + oy; A.alpha(ctx, 1 - k, () => { for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2 + e.t * 3, r0 = 4 + k * 10, r1 = 12 + k * 34; A.line(ctx, x + Math.cos(a) * r0, y + Math.sin(a) * r0, x + Math.cos(a) * r1, y + Math.sin(a) * r1, i % 2 ? e.pal.c : '#ffffff', i % 3 ? 1 : 2); } A.star(ctx, x, y, Math.round(3 + (1 - k) * 4), '#ffffff', e.pal.l); }); } };
 
   /** Hit every target `test` accepts. once: each target only once per effect; otherwise every `every` seconds. */
   function hitWhere(game, e, test, o) {
@@ -217,10 +276,35 @@
     const n = Math.max(8, Math.round(r * 2.4 / step));
     for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; px(ctx, x + Math.cos(a) * r, y + Math.sin(a) * ry, 1, 1, col); }
   }
+  /** A filled pixel circle (col2: a highlight on its upper-left), drawn as one span per row. */
   function disc(ctx, x, y, r, col, col2) {
-    for (let yy = -r; yy <= r; yy++) for (let xx = -r; xx <= r; xx++) {
-      const d = xx * xx + yy * yy;
-      if (d <= r * r) px(ctx, x + xx, y + yy, 1, 1, col2 && d <= (r - 1.5) * (r - 1.5) && xx + yy < 0 ? col2 : col);
+    const n = Math.floor(2 * r + 1e-9), R2 = r * r, I2 = (r - 1.5) * (r - 1.5);
+    for (let yy = -r; yy <= r; yy++) {
+      const yy2 = yy * yy, ins = (i, lim) => { const xx = -r + i; return xx * xx + yy2 <= lim; };
+      // the span of i (xx = -r + i) inside the circle: estimate with sqrt, then settle exactly
+      const span = (lim) => {
+        const w = Math.sqrt(Math.max(0, lim - yy2));
+        let a = Math.max(0, Math.ceil(r - w)), b = Math.min(n, Math.floor(r + w));
+        while (a > 0 && ins(a - 1, lim)) a--;
+        while (a <= b && !ins(a, lim)) a++;
+        while (b < n && ins(b + 1, lim)) b++;
+        while (b >= a && !ins(b, lim)) b--;
+        return [a, b];
+      };
+      const [a, b] = span(R2);
+      if (a > b) continue;
+      let h0 = 1, h1 = 0;
+      if (col2) {
+        const [c, d] = span(I2);
+        let e = Math.ceil(r - yy) - 1;              // last i with xx + yy < 0
+        while (e + 1 <= n && -r + (e + 1) + yy < 0) e++;
+        while (e >= 0 && !(-r + e + yy < 0)) e--;
+        h0 = Math.max(a, c); h1 = Math.min(b, d, e);
+      }
+      if (h0 > h1) { px(ctx, x - r + a, y + yy, b - a + 1, 1, col); continue; }
+      if (h0 > a) px(ctx, x - r + a, y + yy, h0 - a, 1, col);
+      px(ctx, x - r + h0, y + yy, h1 - h0 + 1, 1, col2);
+      if (b > h1) px(ctx, x - r + h1 + 1, y + yy, b - h1, 1, col);
     }
   }
   function jag(ctx, x0, y0, x1, y1, col, amp, w) {
@@ -296,6 +380,10 @@
     update(dt) {
       this.t += dt;
       if (this.k.update) this.k.update(this, dt, this.game, this.A);
+      if ((this.isAwk || this.up) && !this.isUlt && !this.juice && this.pal && dt > 0) {
+        if (this._lx !== undefined && Math.hypot(this.x - this._lx, this.y - this._ly) > 150 * dt && Math.random() < dt * 45) puff(this.game, this.x, this.y, this.pal.fx, this.pal, 1, 0.5);
+        this._lx = this.x; this._ly = this.y;
+      }
       if (this.tick) this.tick(this, dt, this.A);
       if (this.t >= this.life) this.dead = true;
       if (this.dead && !this.ended) { this.ended = true; if (this.onEnd) this.onEnd(this, this.A); if (this.k.onEnd) this.k.onEnd(this, this.A); }
@@ -341,7 +429,7 @@
       tickR(e, x, y, r, every, o) { return hitWhere(game, e, inCircle(x, y, r), Object.assign({ once: false, every: every || 0.4 }, o)); },
       damage(e, t, mult, kb) { damage(game, t, e.dmg * (mult || 1), centerOf(t).x >= e.x ? 1 : -1, e, kb); },
       // spawning (sub-effects inherit the move's colours / damage / status)
-      spawn(e, def, o) { return add(game, def, Object.assign({ pal: e.pal, dmg: e.dmg, status: e.status, potency: e.potency, up: e.up, isUlt: e.isUlt, dir: e.dir, x: e.x, y: e.y }, o)); },
+      spawn(e, def, o) { return add(game, def, Object.assign({ pal: e.pal, dmg: e.dmg, status: e.status, potency: e.potency, up: e.up, isUlt: e.isUlt, isAwk: e.isAwk, el: e.el, dir: e.dir, x: e.x, y: e.y }, o)); },
       proj(e, o) { return proj(game, e, o.x === undefined ? e.x : o.x, o.y === undefined ? e.y : o.y, o.vx || 0, o.vy || 0, o); },
       blast(e, x, y, r, o) { return blast(game, e, x, y, r, o); },
       puff(e, x, y, n, spread) { puff(game, x, y, e.pal.fx, e.pal, n || 4, spread); },
@@ -352,11 +440,12 @@
     return A;
   }
   function blast(game, from, x, y, r, opts) {
-    return add(game, 'blastfx', Object.assign({ x, y, r, life: 0.35, pal: from.pal, dmg: from.dmg, status: from.status, potency: from.potency, up: from.up, isUlt: from.isUlt, fx: from.pal.fx }, opts || {}));
+    if (from.el && ERX.ElementSfx) ERX.ElementSfx.boom(from.el, r, !!from.isAwk, !!from.isUlt);
+    return add(game, 'blastfx', Object.assign({ x, y, r, life: 0.35, pal: from.pal, dmg: from.dmg, status: from.status, potency: from.potency, up: from.up, isUlt: from.isUlt, isAwk: from.isAwk, el: from.el, fx: from.pal.fx }, opts || {}));
   }
   /** A projectile (volley pieces, rain, turret shots...). */
   function proj(game, from, x, y, vx, vy, o) {
-    return add(game, 'proj', Object.assign({ x, y, vx, vy, life: 1.2, pal: from.pal, dmg: from.dmg, status: from.status, potency: from.potency, up: from.up, isUlt: from.isUlt, shape: 'orb', scale: from.up ? 1.5 : 1 }, o || {}));
+    return add(game, 'proj', Object.assign({ x, y, vx, vy, life: 1.2, pal: from.pal, dmg: from.dmg, status: from.status, potency: from.potency, up: from.up, isUlt: from.isUlt, isAwk: from.isAwk, el: from.el, shape: 'orb', scale: from.up ? 1.5 : 1 }, o || {}));
   }
 
   const KINDS = {
@@ -987,22 +1076,22 @@
     STATUS, KINDS, SLOTS, DEF,
 
     kit(id) { return (ERX.Kits || {})[id] || null; },
-    move(kit, slot) {
+    move(kit, slot, up) {
       if (!kit) return null;
-      if (slot === 'm1') return kit.m1;
+      if (slot === 'm1') return (up && kit.m1Up) || kit.m1;
       if (slot === 'ult') return kit.ult;
       return kit.s[+slot.slice(1) - 1];
     },
     /** Numbers for a move (dmg / cooldown / mana). */
-    stats(kit, slot) {
-      const mv = this.move(kit, slot);
+    stats(kit, slot, up) {
+      const mv = this.move(kit, slot, up);
       if (slot === 'ult') return { dmg: mv.dmg || 30, cd: 1, mp: 0 };
       const d = DEF[mv.kind] || {};
       const base = (slot === 'm1' ? d.m1 : d.s) || d.s || d.m1 || { dmg: slot === 'm1' ? 8 : 14, cd: slot === 'm1' ? 0.42 : 5, mp: 6 };
       return { dmg: mv.dmg || base.dmg, cd: mv.cd || base.cd, mp: slot === 'm1' ? 0 : (mv.mp || base.mp || 6) };
     },
-    describe(kit, slot, elName) {
-      const mv = this.move(kit, slot);
+    describe(kit, slot, elName, up) {
+      const mv = this.move(kit, slot, up);
       if (slot === 'ult') return mv.desc || 'ULTIMATE. Fill the meter by dealing damage, then unleash ' + mv.name + '.';
       return (mv.desc || DESC[mv.kind] || '').replace('{E}', elName.toLowerCase());
     },
@@ -1010,7 +1099,7 @@
     castMove(game, mv, o) {
       const p = game.player;
       const opts = Object.assign({ x: p.cx + p.facing * 10, y: p.y + 10, dir: p.facing, p: mv.p || {}, draw: mv.draw, tick: mv.tick, onEnd: mv.onEnd, drawShape: mv.drawShape }, o);
-      if (mv.kind === 'custom') return add(game, { spawn: mv.spawn, update: mv.update, draw: mv.draw, life: mv.life || 1, layer: mv.layer }, opts);
+      if (mv.kind === 'custom') return add(game, { spawn: mv.spawn, update: mv.update, draw: mv.draw, life: mv.life || 1, layer: mv.layer, noGlow: mv.noGlow }, opts);
       if (!KINDS[mv.kind]) return null;
       return add(game, mv.kind, opts);
     },
@@ -1044,6 +1133,7 @@
     constructor(player) {
       this.player = player;
       this.cd = { m1: 0, s1: 0, s2: 0, s3: 0, s4: 0, s5: 0, ult: 0 };
+      this.cdMax = {};   // the full cooldown each slot started from (upgraded moves have their own)
       this.ult = 0;
       this.buffs = {};
       this.awk = 0;          // the Awakening meter (0..100)
@@ -1054,7 +1144,7 @@
     awaken() {
       const g = this.game();
       if (!ERX.Awakening.ready(this.player)) {
-        if (!this.awakened() && this.el()) { sfx('deny', { minGap: 0.25 }); g.floatText(this.player.cx, this.player.y - 8, 'AWAKENING NOT READY', '#ff8a6a'); }
+        if (!this.awakened() && this.el() && ERX.Awakening.unlocked(g)) { sfx('deny', { minGap: 0.25 }); g.floatText(this.player.cx, this.player.y - 8, 'AWAKENING NOT READY', '#ff8a6a'); }
         return false;
       }
       return ERX.Awakening.start(g);
@@ -1072,6 +1162,9 @@
       if (ERX.Admin && ERX.Admin.on() && ERX.Admin.data.instantAwk && !this.awakened()) this.awk = 100;
       if (ERX.Admin && ERX.Admin.on() && ERX.Admin.data.instantUlt) this.ult = 100;
     }
+
+    /** 1 -> 0 as a slot comes off cooldown (for the cooldown sweeps on the HUD and touch buttons). */
+    cdFrac(slot) { const max = this.cdMax[slot] || 1; return this.cd[slot] > 0 ? Math.min(1, this.cd[slot] / max) : 0; }
 
     ready(slot) {
       const g = this.game(), kit = this.kit();
@@ -1097,12 +1190,12 @@
       }
       const up = Abilities.rank(g, slot) >= 2;
       const pal = palette(el, kit, up);
-      const st = Abilities.stats(kit, slot);
+      const st = Abilities.stats(kit, slot, up);
       const lvl = 1 + 0.06 * (p.level - 1);
       const rage = this.buffs.rage ? (this.buffs.rage.up ? 1.7 : 1.5) : 1;
       const potency = Abilities.rank(g, 'potency');
-      const base = { pal, up, status: kit.status, potency, dmg: st.dmg * lvl * (up ? 1.6 : 1) * rage };
-      this.cd[slot] = st.cd;
+      const base = { pal, up, status: kit.status, potency, dmg: st.dmg * lvl * (up ? 1.6 : 1) * rage, isAwk: this.awakened(), el: el.id };
+      this.cd[slot] = this.cdMax[slot] = st.cd * (up && slot !== 'ult' ? 0.85 : 1);   // upgraded: faster
       if (slot !== 'ult' && !(ERX.Admin && ERX.Admin.on() && ERX.Admin.data.infiniteMp)) p.mp -= st.mp;
       if (slot === 'ult') {
         this.ult = 0;
@@ -1110,8 +1203,14 @@
         ERX.Ultimate.start(g, el, kit, Object.assign({}, base, { dmg: st.dmg * lvl * (up ? 1.5 : 1) * rage, isUlt: true }), { awakened: this.awakened() });
         return true;
       }
-      const mv = Abilities.move(kit, slot);
+      const mv = Abilities.move(kit, slot, up);
       Abilities.castMove(g, mv, base);
+      if (ERX.ElementSfx) ERX.ElementSfx.move(el.id, slot, this.awakened());   // it sounds like your element
+      if (slot === 'm1' && this.awakened()) {
+        const now = g.t || 0;
+        this._m1n = now - (this._m1t || -9) > 1.2 ? 1 : (this._m1n || 0) + 1; this._m1t = now;
+        if (this._m1n % 3 === 0) { const fx = p.cx + p.facing * 22, fy = p.y + 10; blast(g, base, fx, fy, 38 * (up ? 1.4 : 1), { dmg: base.dmg * 1.6 }); add(g, FINISHFX, Object.assign({}, base, { x: fx, y: fy, dir: p.facing })); ERX.FX.shake(2.5, 0.12); }
+      }
       if (slot !== 'm1') g.floatText(p.cx, p.y - 12, mv.name.toUpperCase(), pal.l);
       return true;
     }
@@ -1194,6 +1293,61 @@
     puff(game, p.cx - p.facing * 4, p.y + rnd(2, p.h - 2), kit.fx, p._dashPal, up ? 3 : 2, 0.8);
   }
 
+  /**
+   * The awakened glow. Awakened moves (not Ultimates) are drawn onto a layer of their own, which then goes on
+   * screen with a soft bloom in your awakened colour (shrunk twice to blur it, tinted, stretched back) and a
+   * one-pixel thickening, so every stroke reads bolder than the same move un-awakened.
+   */
+  function makeGlow(test, bloom, thick) { return {
+    cv: null,
+    /** Should this effect go on this glow layer? */
+    wants(fx) { return test(fx) && !fx.noGlow && !(fx.k && fx.k.noGlow) && fx.layer !== 'screen'; },
+    /** A cleared layer the size of the view. */
+    begin(w, h) {
+      if (!this.cv) { this.cv = ERX.makeCanvas(w, h); this.mid = ERX.makeCanvas(1, 1); this.sm = ERX.makeCanvas(1, 1); }
+      if (this.cv.width !== w || this.cv.height !== h) { this.cv.width = w; this.cv.height = h; this.mid.width = Math.ceil(w / 2); this.mid.height = Math.ceil(h / 2); this.sm.width = Math.ceil(w / 4); this.sm.height = Math.ceil(h / 4); }
+      const c = this.cv.getContext('2d');
+      c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; c.clearRect(0, 0, w, h); c.imageSmoothingEnabled = false;
+      return c;
+    },
+    /** Put the layer on `ctx`: bloom first, then the thickening, then the layer itself. */
+    end(ctx, col) {
+      const { cv, mid, sm } = this, w = cv.width, h = cv.height, m = mid.getContext('2d'), s = sm.getContext('2d');
+      m.clearRect(0, 0, mid.width, mid.height); m.imageSmoothingEnabled = true; m.drawImage(cv, 0, 0, mid.width, mid.height);
+      s.globalCompositeOperation = 'source-over'; s.clearRect(0, 0, sm.width, sm.height); s.imageSmoothingEnabled = true; s.drawImage(mid, 0, 0, sm.width, sm.height);
+      s.globalCompositeOperation = 'source-in'; s.fillStyle = col; s.fillRect(0, 0, sm.width, sm.height); s.globalCompositeOperation = 'source-over';
+      ctx.save();
+      ctx.imageSmoothingEnabled = true; ctx.globalAlpha = bloom; ctx.drawImage(sm, 0, 0, w, h); if (bloom > 0.7) ctx.drawImage(sm, -1, -1, w + 2, h + 2);
+      ctx.imageSmoothingEnabled = false; ctx.globalAlpha = thick;
+      ctx.drawImage(cv, 1, 0); ctx.drawImage(cv, -1, 0); ctx.drawImage(cv, 0, 1); ctx.drawImage(cv, 0, -1);
+      ctx.globalAlpha = 1; ctx.drawImage(cv, 0, 0);
+      ctx.restore();
+    },
+  }; }
+  const Glow = makeGlow((fx) => !!fx.isAwk && !fx.isUlt, 0.85, 0.4);
+  /** Upgraded (un-awakened) moves: the same treatment, lighter, so every stroke looks richer than the basic move. */
+  const Bright = makeGlow((fx) => !!fx.up && !!fx.el && !fx.isAwk && !fx.isUlt, 0.35, 0.4);
+
+  /** Un-awakened element moves get a lighter version: their own layer, thickened by one pixel (no bloom). */
+  const Bold = {
+    cv: null,
+    wants(fx) { return !!fx.el && !fx.isAwk && !fx.isUlt && !fx.up && !fx.noGlow && !(fx.k && fx.k.noGlow) && fx.layer !== 'screen'; },
+    begin(w, h) {
+      if (!this.cv) this.cv = ERX.makeCanvas(w, h);
+      if (this.cv.width !== w || this.cv.height !== h) { this.cv.width = w; this.cv.height = h; }
+      const c = this.cv.getContext('2d');
+      c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; c.clearRect(0, 0, w, h); c.imageSmoothingEnabled = false;
+      return c;
+    },
+    end(ctx) {
+      const cv = this.cv;
+      ctx.save(); ctx.imageSmoothingEnabled = false; ctx.globalAlpha = 0.3;
+      ctx.drawImage(cv, 1, 0); ctx.drawImage(cv, -1, 0); ctx.drawImage(cv, 0, 1); ctx.drawImage(cv, 0, -1);
+      ctx.globalAlpha = 1; ctx.drawImage(cv, 0, 0);
+      ctx.restore();
+    },
+  };
+
   /** Ultimate overlays that cover the whole view (tints, time stop, the full moon). */
   Abilities.renderScreen = function (ctx, e, vw, vh) {
     const fade = Math.min(1, e.t / 0.3, Math.max(0, (e.life - e.t) / 0.5));
@@ -1229,6 +1383,9 @@
   Abilities.targets = targets;
   Abilities.toHex = toHex;
   Abilities.rainbowColor = rainbowColor;
+  Abilities.Glow = Glow;
+  Abilities.Bright = Bright;
+  Abilities.Bold = Bold;
   ERX.Abilities = Abilities;
   ERX.AbilityState = AbilityState;
 })(window.ERX = window.ERX || {});

@@ -25,6 +25,15 @@
     },
 
     move(level, b, dt) {
+      // a big step (a slow frame, a slam) is split up so nothing tunnels into the floor
+      const n = Math.ceil(Math.max(Math.abs(b.vx), Math.abs(b.vy)) * dt / (level.TS * 0.5));
+      if (!(n > 1)) return this.step(level, b, dt);
+      let wall = false, ceil = false;
+      for (let i = 0; i < n; i++) { this.step(level, b, dt / n); wall = wall || b.hitWall; ceil = ceil || b.hitCeiling; }
+      b.hitWall = wall; b.hitCeiling = ceil;
+    },
+
+    step(level, b, dt) {
       const TS = level.TS;
       b.hitWall = false;
       b.hitCeiling = false;

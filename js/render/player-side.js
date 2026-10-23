@@ -12,7 +12,8 @@
  *     (the smooth, blended awakened animations: see js/game/awakening.js)
  *   ERX.PlayerSide.points(joints) -> where the eye / cheek / hands / feet are,
  *     relative to the feet anchor, facing right (flip dx when facing left)
- * Extra joint flags: hideHands (hands in pockets), noLegs (lower body hidden).
+ * Extra joint flags: hideHands (hands in pockets), noLegs (lower body hidden),
+ *   wind (freefall: hair, ponytails and scarves blow straight up; windPh 0..3 animates them).
  * Poses: idle(2) run(6) jump fall attack(3) block dash(3) hurt lie
  *        + ultimate cutscene poses: clapOpen clap raise raiseBoth push crouch
  * Feet rest on canvas row 25; ANCHOR is the point between the feet.
@@ -141,9 +142,10 @@
     // ---------------- back layers ----------------
     const hy = shoulderY - 8;           // head top (chin rests on the shoulders)
     const hx = 4 + shX(hy + 4);         // head left
-    // hair that hangs behind the body
-    if (hs === 2) rect(hx - 1, hy + 2, 4, 10, hairD);
-    if (hs === 3) { const w = p.whip || 0; rect(hx - 3 - w, hy + 2, 4, 2, hairD); rect(hx - 3 - w * 2, hy + 4, 2, 4 - w, hairD); px(hx, hy + 2, '#ffd34d'); }
+    // hair that hangs behind the body (or, falling, streams straight up)
+    const wph = p.windPh || 0, wob = (i) => ((i + wph) % 4 === 0 ? -1 : (i + wph) % 4 === 2 ? 1 : 0);
+    if (hs === 2) { if (p.wind) for (let y = 0; y < 9; y++) rect(hx - 1 + wob(y >> 1), hy - 7 + y, 4, 1, hairD); else rect(hx - 1, hy + 2, 4, 10, hairD); }
+    if (hs === 3) { if (p.wind) { rect(hx - 1, hy - 3, 3, 3, hairD); for (let y = 0; y < 5; y++) rect(hx - 1 + wob(y), hy - 4 - y, 2, 1, hairD); px(hx, hy - 1, '#ffd34d'); } else { const w = p.whip || 0; rect(hx - 3 - w, hy + 2, 4, 2, hairD); rect(hx - 3 - w * 2, hy + 4, 2, 4 - w, hairD); px(hx, hy + 2, '#ffd34d'); } }
     if (hs === 7) {
       for (let y = -2; y <= 9; y++) for (let x = -2; x <= 10; x++) {
         const dx = x - 3.8, dy = y - 3.5;
@@ -151,7 +153,7 @@
       }
     }
     if (outfit === 1) rect(hx - 1, hy + 2, 4, 8, outD); // hood
-    if (outfit === 6) { const w = p.whip || 0; rect(sx - 5 - w, shoulderY + 1, 4, 2, '#9a2a2a'); px(sx - 6 - w * 2, shoulderY + 3, '#9a2a2a'); } // scarf tail
+    if (outfit === 6) { if (p.wind) { for (let y = 0; y < 6; y++) rect(sx - 4 + wob(y), shoulderY - 1 - y, 2, 1, '#9a2a2a'); } else { const w = p.whip || 0; rect(sx - 5 - w, shoulderY + 1, 4, 2, '#9a2a2a'); px(sx - 6 - w * 2, shoulderY + 3, '#9a2a2a'); } } // scarf tail
 
     drawArm(p.BA, true);
     if (!p.noLegs) { drawLeg(p.BL, true); drawLeg(p.FL, false); }
@@ -256,6 +258,10 @@
       case 7: cap(); break;
       case 8: px(hx + 3, hy + 1, C.shade(skin, 0.35)); break;
     }
+    // freefall: the rest of the hair gets blown up off your head too
+    if (p.wind && hs !== 8 && hs !== 5) {
+      [[1, -2], [2, -3], [3, -2], [4, -3], [5, -2], [6, -2]].forEach(([x, y], i) => { H(x + wob(i), y, i % 2 ? hairL : hair); if ((i + wph) % 2) H(x + wob(i + 1), y - 1, hairD); });
+    }
     // optional headwear (NPCs): a miner's hard hat with a headlamp
     if (look.hat === 'hard') {
       for (let x = 0; x <= 7; x++) { H(x, -2, '#e8c040'); H(x, -1, '#e8c040'); H(x, 0, x < 3 ? '#f8e070' : '#d8a830'); }
@@ -283,7 +289,7 @@
       FL: [r(j.FL[0]), r(j.FL[1])], BL: [r(j.BL[0]), r(j.BL[1])], FA: [r(j.FA[0]), r(j.FA[1])], BA: [r(j.BA[0]), r(j.BA[1])],
     });
   }
-  const jointKey = (p) => [p.bob, p.lean, p.FL, p.BL, p.FA, p.BA, p.fist ? 1 : 0, p.hideHands ? 1 : 0, p.noLegs ? 1 : 0, p.eyesClosed ? 1 : 0, p.mouthOpen ? 1 : 0, p.guard ? 1 : 0].join('|');
+  const jointKey = (p) => [p.bob, p.lean, p.FL, p.BL, p.FA, p.BA, p.fist ? 1 : 0, p.hideHands ? 1 : 0, p.noLegs ? 1 : 0, p.eyesClosed ? 1 : 0, p.mouthOpen ? 1 : 0, p.guard ? 1 : 0, p.wind ? 1 + (p.windPh || 0) : 0].join('|');
 
   const PlayerSide = {
     W: 26, H: 29,

@@ -25,12 +25,14 @@
         skills: Object.assign({ vitality: 0, focus: 0, agility: 0 }, c.skills || {}),
         skillPoints: Number.isInteger(c.skillPoints) ? c.skillPoints : 0,
         gold: Number.isInteger(c.gold) && c.gold > 0 ? c.gold : 0,
-        elementSkills: c.elementSkills && typeof c.elementSkills === 'object' ? Object.fromEntries(Object.entries(c.elementSkills).filter(([k, v]) => /^(m1|s1|s2|s3|ult|block|dash|potency)$/.test(k) && Number.isInteger(v) && v >= 0 && v <= 3)) : {},
+        elementSkills: c.elementSkills && typeof c.elementSkills === 'object' ? Object.fromEntries(Object.entries(c.elementSkills).filter(([k, v]) => /^(m1|s[1-5]|ult|block|dash|potency)$/.test(k) && Number.isInteger(v) && v >= 0 && v <= 3)) : {},
         armor: ERX.Armor && ERX.Armor.get(c.armor) ? c.armor : null,
         armorOwned: Array.isArray(c.armorOwned) ? c.armorOwned.filter((id) => ERX.Armor && ERX.Armor.get(id)) : [],
       }));
       // the element only ever comes from the reveal; drop anything invalid
       for (const c of this.characters) if (!(ERX.Elements && ERX.Elements.get(c.element))) delete c.element;
+      // a saved bag with anything broken in it gets tidied (older saves move into the bag when it's first used)
+      for (const c of this.characters) if (ERX.Inventory) ERX.Inventory.clean(c);
       return this.characters;
     },
 

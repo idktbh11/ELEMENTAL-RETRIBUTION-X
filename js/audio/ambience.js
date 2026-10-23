@@ -186,6 +186,7 @@
     }
   }
 
+  ERX.AmbienceBase = AmbienceBase;   // other files build soundscapes on it (js/audio/world-audio.js)
   ERX.AmbienceBank = {
     sky: SkyAmbience,
     village: VillageAmbience,

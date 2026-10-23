@@ -132,11 +132,14 @@
       ];
     },
     _hasElement() { const g = ERX.Scenes.top(); return !!(g && g.player && g.player.kit && g.player.kit()); },
+    /** The AWAKEN button only shows once Awakening is earned (or the admin has it going). */
+    _awkShown() { const g = ERX.Scenes.top(), ab = g && g.player && g.player.ab; return !!ab && (ERX.Awakening.unlocked(g) || ab.awakened() || ab.awk > 0); },
     _hit(x, y) {
       let best = null, bd = Infinity;
       const el = this._hasElement();
       for (const b of this.buttons) {
         if (b.element && !el) continue;
+        if (b.slot === 'awk' && !this._awkShown()) continue;
         const dx = (x - b.x) / (b.wide ? 1.5 : 1), dy = y - b.y;
         const d = Math.sqrt(dx * dx + dy * dy);
         if (d < b.r + 8 && d - b.r < bd) { best = b; bd = d - b.r; }
@@ -158,6 +161,7 @@
       const hasEl = this._hasElement();
       for (const b of this.buttons) {
         if (b.element && !hasEl) continue;
+        if (b.slot === 'awk' && !this._awkShown()) continue;
         if (b.element) { this._renderAbility(ctx, b, g); continue; }
         const held = b.id === 'pad' ? false : b.action ? this.down.has(b.action) : false;
         const glow = b.id === 'use' && !!g.prompt;
@@ -182,7 +186,7 @@
         const h = Math.round(2 * b.r * Math.min(1, ab.ult / 100));
         ctx.fillRect(b.x - b.r, b.y + b.r - h, b.r * 2, h);
       } else if (!ult && ab.cd[b.slot] > 0) {
-        const kit = g.player.kit(), k = ab.cd[b.slot] / ERX.Abilities.stats(kit, b.slot).cd;
+        const k = ab.cdFrac(b.slot);
         ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.arc(b.x, b.y, b.r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k); ctx.closePath();
         ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fill();
       }

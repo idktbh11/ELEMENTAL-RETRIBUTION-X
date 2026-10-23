@@ -19,6 +19,30 @@
     A.disc(ctx, x, y, Math.round(r), P.c, '#ffffff'); A.disc(ctx, x - r * 0.25, y - r * 0.25, Math.max(1, Math.round(r * 0.45)), '#ffffff');
   };
   const AZURE = ['#1a5aff', '#3ab0ff', '#e8f8ff'];
+  /** One azure meteor: streaks from (sx, sy) down to (tx, gy) in `fall` seconds, then craters. big: the last, huge one. */
+  const METEOR = {
+    update(m, dt, g, A) {
+      const q = Math.min(1, m.t / m.fall);
+      m.mx = U.lerp(m.sx, m.tx, q); m.my = U.lerp(m.sy, m.gy, q);
+      if (q < 1 || m.b) return;
+      m.b = true; m.bt = m.t;
+      const r = (m.big ? 34 : 17) * H.sc(m);
+      if (m.big) W.boom(A, m, m.tx, m.gy - 6, r, { mult: 2.2, flat: 0.55 });
+      else { A.hitR(m, m.tx, m.gy - 5, r, { kb: 0.8 }); A.spawn(m, W.SHOCK, { x: m.tx, y: m.gy - 2, r, flat: 0.45, dmg: 0 }); A.shake(1.5, 0.08); if (ERX.ElementSfx) ERX.ElementSfx.boom(m.el, r, true); }
+      W.debris(A, m.tx, m.gy - 2, m.big ? 16 : 6, AZURE.concat(['#ffffff']), m.big ? 190 : 120);
+      for (let i = 0; i < (m.big ? 10 : 4); i++) A.spawn(m, BLUE_LICK, { x: m.tx + A.rnd(-r * 0.6, r * 0.6), y: m.gy - 1, ph: i, dmg: 0 });
+    },
+    draw(m, ctx, ox, oy, A) {
+      if (m.b) { const k = (m.t - m.bt) / 0.4; A.alpha(ctx, 1 - k, () => { A.disc(ctx, m.tx + ox, m.gy + oy - 1, Math.max(1, Math.round(m.R * 1.8 * (1 - k))), '#3ab0ff', '#e8f8ff'); A.px(ctx, m.tx + ox - m.R * 2, m.gy + oy - 1, m.R * 4, 1, '#e8f8ff'); }); return; }
+      if (m.mx === undefined) return;
+      const x = m.mx + ox, y = m.my + oy, dx = m.tx - m.sx, dy = m.gy - m.sy, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L, tl = m.R * 7;
+      W.beam(ctx, A, x - ux * tl, y - uy * tl, x, y, 1, m.pal.c, m.pal.l);
+      W.beam(ctx, A, x - ux * tl * 0.5, y - uy * tl * 0.5, x, y, Math.max(1, m.R * 0.7), m.pal.c, m.pal.l);
+      A.glow(ctx, x, y, m.R + 3, m.pal.c, 0.35);
+      A.disc(ctx, x, y, Math.max(1, Math.round(m.R)), m.pal.c, '#ffffff');
+      A.disc(ctx, x, y, Math.max(1, Math.round(m.R * 0.45)), '#ffffff');
+    },
+  };
   AW.fire = {
     color: '#3ab0ff', up: '#f0fbff', status: 'scorch', fx: 'embers', block: ['Azure Inferno Wall', 'shield'],
     icons: ['lanceA', 'fuse', 'meteorShower', 'eruption', 'dragon'],
@@ -113,14 +137,14 @@
       },
       {
         name: 'Azure Meteor Shower', dmg: 12, cd: 8, mp: 7, kind: 'custom', life: 1.6,
-        desc: 'Small blue meteors streak down diagonally across a wide area.',
+        desc: 'Blue meteors streak down across a wide area, each one cratering the ground. The last one is HUGE.',
         spawn(e, g, A) { H.at(e, A, 0); const ax = A.aim(e, 170); e.cx2 = ax !== null ? ax : e.x + e.dir * 80; e.top = H.sky(A, e.cx2, A.p.y - 20); e.n = 0; A.sfx('orbDash'); },
         update(e, dt, g, A) {
-          const want = Math.min(e.up ? 11 : 8, Math.floor(e.t / 0.11) + 1);
+          const total = e.up ? 11 : 8, want = Math.min(total, Math.floor(e.t / 0.11) + 1);
           while (e.n < want) {
             e.n++;
-            const tx = e.cx2 + A.rnd(-50, 50), gy = A.ground(tx, A.p.y);
-            A.spawn(e, { life: 0.45, spawn(m) { m.sx = tx - e.dir * 60; m.sy = e.top; m.tx = tx; m.gy = gy; }, update(m, dt, g, A) { const q = m.t / 0.3; m.mx = U.lerp(m.sx, m.tx, Math.min(1, q)); m.my = U.lerp(m.sy, m.gy, Math.min(1, q)); if (q >= 1 && !m.b) { m.b = true; A.hitR(m, m.tx, m.gy - 4, 14, { kb: 0.6 }); A.sfx('boom', { minGap: 0.06 }); for (let i = 0; i < 5; i++) A.spawn(m, BLUE_LICK, { x: m.tx + A.rnd(-6, 6), y: m.gy - 1, ph: i }); } }, draw(m, ctx, ox, oy, A) { if (m.b) { const k = (m.t - 0.3) / 0.15; A.alpha(ctx, 1 - k, () => A.ring(ctx, m.tx + ox, m.gy + oy - 3, 4 + k * 10, '#ffffff', 2 + k * 3)); return; } for (let i = 0; i < 6; i++) A.alpha(ctx, 1 - i / 6, () => A.px(ctx, m.mx + ox - e.dir * i * -2 - (m.tx - m.sx) * 0.03 * i, m.my + oy - i * 2.6, 2, 2, i < 2 ? '#ffffff' : m.pal.c)); } }, {});
+            const big = e.n === total, tx = big ? e.cx2 : e.cx2 + A.rnd(-55, 55), fall = big ? 0.42 : 0.3;
+            A.spawn(e, METEOR, { sx: tx - e.dir * (big ? 90 : 60), sy: e.top, tx, gy: A.ground(tx, A.p.y), R: (big ? 7 : 3.5) * H.sc(e), fall, big, life: fall + 0.4 });
           }
         },
       },
@@ -232,41 +256,102 @@
       hit(g, x, y, d) { for (let i = 0; i < 18; i++) dot(g, x, y, d * U.lerp(0, 120, Math.random()), U.lerp(-170, -30, Math.random()), i % 2 ? '#3a8aff' : '#ffffff', { ay: 420 }); },
     },
     m1: {
-      name: 'Riptide Palm', dmg: 9, cd: 0.38, kind: 'custom', life: 0.35,
-      desc: 'A palm strike that fires a spinning ring of pressurised water.',
-      spawn(e, g, A) { H.at(e, A, 10, -1); e.vx = e.dir * 230; A.sfx('swing', { minGap: 0.04 }); },
-      update(e, dt, g, A) { e.x += e.vx * dt; const r = 7 * H.sc(e); A.hit(e, { x: e.x - 3, y: e.y - r, w: 6, h: r * 2 }, { kb: 1.2 }); },
-      draw(e, ctx, ox, oy, A) { const x = e.x + ox, y = e.y + oy, r = 7 * H.sc(e); A.alpha(ctx, A.fade(e, 0.03, 0.1), () => { A.ring(ctx, x, y, 3, e.pal.c, r); A.ring(ctx, x - e.dir * 2, y, 2, '#c8f0ff', r - 2); for (let i = 0; i < 4; i++) A.px(ctx, x + Math.cos(e.t * 30 + i * 1.6) * 2, y + Math.sin(e.t * 30 + i * 1.6) * r, 1, 1, '#ffffff'); }); },
+      name: 'Riptide Palm', dmg: 9, cd: 0.38, kind: 'custom', life: 0.38,
+      desc: 'A palm strike that fires a spinning ring of pressurised water. It plows through enemies and bursts at the end.',
+      spawn(e, g, A) { H.at(e, A, 10, -1); e.vx = e.dir * 240; splash(A, e, e.x, e.y, 5, 70); A.sfx('swing', { minGap: 0.04 }); },
+      update(e, dt, g, A) { e.x += e.vx * dt; const r = 9 * H.sc(e); if (A.hit(e, { x: e.x - 5, y: e.y - r, w: 10, h: r * 2 }, { kb: 1.2 })) splash(A, e, e.x, e.y, 4, 80); if (A.solid(e.x, e.y)) e.dead = true; },
+      onEnd(e, A) { splash(A, e, e.x, e.y, 8, 100); A.spawn(e, W.SHOCK, { x: e.x, y: e.y, r: 12 * H.sc(e), flat: 1.4, dmg: 0, life: 0.25 }); },
+      draw(e, ctx, ox, oy, A) {
+        const x = e.x + ox, y = e.y + oy, r = 9 * H.sc(e), rx = r * 0.45, d = e.dir;
+        A.alpha(ctx, A.fade(e, 0.03, 0.08), () => {
+          A.alpha(ctx, 0.35, () => { for (let yy = -r; yy <= r; yy++) { const w = Math.sqrt(Math.max(0, 1 - (yy / r) * (yy / r))) * rx; A.px(ctx, x - w, y + yy, w * 2 + 1, 1, e.pal.c); } });
+          for (let i = 1; i < 5; i++) A.alpha(ctx, 0.5 - i * 0.1, () => A.ring(ctx, x - d * i * 5, y, Math.max(1, rx - i * 0.5), e.pal.l, Math.max(1, r - i)));
+          for (let w = 0; w < 2; w++) A.ring(ctx, x, y, rx - w, w ? e.pal.c : '#c8f0ff', r - w);
+          for (let i = 0; i < 6; i++) { const a = e.t * 28 + i * 1.05; A.px(ctx, x + Math.cos(a) * rx, y + Math.sin(a) * r, 2, 1, '#ffffff'); }
+        });
+      },
     },
     s: [
       {
         name: 'Trident Hurl', dmg: 24, cd: 5, mp: 6, kind: 'custom', life: 1.4,
-        desc: 'Throw a trident of solid water. It skewers everything in a line and bursts into a geyser where it lands.',
+        desc: 'Throw a trident of solid water. It skewers everything in a line and bursts into a towering geyser where it lands.',
         spawn(e, g, A) { H.at(e, A, 8, -3); e.vx = e.dir * 330; A.sfx('whoosh'); },
-        update(e, dt, g, A) { const r = H.fly(e, dt, A, { r: 4, pierce: true, kb: 0.6 }); if (r === 'wall' || e.t > 0.8) { const gy = A.ground(e.x - e.dir * 4, e.y); A.spawn(e, { life: 0.7, spawn(s) { s.gy = gy; A.sfx('crash'); }, update(s, dt, g, A) { if (s.t < 0.4) A.hit(s, { x: s.x - 7, y: s.gy - 40, w: 14, h: 40 }, { kb: 0, onHit(t) { if (t.applyStatus) t.applyStatus('launch', 0); } }); }, draw(s, ctx, ox, oy, A) { const h = 40 * Math.min(1, s.t / 0.08) * H.sc(s), f = 1 - Math.max(0, s.t - 0.4) / 0.3; A.alpha(ctx, f, () => { A.px(ctx, s.x + ox - 4, s.gy + oy - h, 8, h, s.pal.c); A.px(ctx, s.x + ox - 1, s.gy + oy - h, 2, h, '#c8f0ff'); A.disc(ctx, s.x + ox, s.gy + oy - h, 5, s.pal.l, '#ffffff'); }); } }, { x: e.x - e.dir * 4 }); e.dead = true; } },
-        draw(e, ctx, ox, oy, A) { const x = e.x + ox, y = e.y + oy, d = e.dir; A.line(ctx, x - d * 22, y, x, y, e.pal.c, 2); for (const dy of [-3, 0, 3]) { A.line(ctx, x, y + dy, x + d * 5, y + dy, '#c8f0ff'); A.px(ctx, x + d * 5, y + dy, 1, 1, '#ffffff'); } A.line(ctx, x, y - 3, x, y + 3, '#c8f0ff'); },
-      },
-      {
-        name: 'Shark Fin', dmg: 26, cd: 6, mp: 6, kind: 'custom', life: 1.4,
-        desc: 'A fin of water cuts along the ground towards the nearest enemy... then a shark bursts out and bites.',
-        spawn(e, g, A) { H.at(e, A, 10); e.gy = H.floor(A, e.x); e.tg = A.near(e.x, e.y, 200); A.sfx('whoosh'); },
         update(e, dt, g, A) {
-          if (!e.bite) { const tx = e.tg && !e.tg.dead ? A.center(e.tg).x : e.x + e.dir * 200; e.x += Math.sign(tx - e.x) * 200 * dt; e.gy = A.ground(e.x, e.gy - 12); if (Math.abs(tx - e.x) < 6 || e.t > 0.9) { e.bite = e.t; A.sfx('crash'); A.hit(e, { x: e.x - 12, y: e.gy - 30, w: 24, h: 30 }, { kb: 1.2, onHit(t) { if (t.applyStatus) t.applyStatus('launch', 0); } }); splash(A, e, e.x, e.gy - 2, 12); } }
+          const r = H.fly(e, dt, A, { r: 5, pierce: true, kb: 0.6 });
+          if (r !== 'wall' && e.t <= 0.8) return;
+          const gy = A.ground(e.x - e.dir * 4, e.y), w = 11 * H.sc(e), GH = 56 * H.sc(e);
+          A.spawn(e, {
+            life: 0.8,
+            spawn(s) { s.gy = gy; A.sfx('crash'); A.shake(3, 0.2); A.spawn(s, W.SHOCK, { x: s.x, y: gy - 2, r: 26 * H.sc(s), flat: 0.4, dmg: 0 }); splash(A, s, s.x, gy - 4, 14, 130); if (ERX.ElementSfx) ERX.ElementSfx.boom(s.el, 30, true); },
+            update(s, dt, g, A) { if (s.t < 0.45) A.hit(s, { x: s.x - w, y: s.gy - GH, w: w * 2, h: GH }, { kb: 0, onHit(t) { if (t.applyStatus) t.applyStatus('launch', 0); } }); if (s.t < 0.5 && Math.random() < dt * 30) splash(A, s, s.x + A.rnd(-w, w), s.gy - A.rnd(10, GH), 1, 60); },
+            draw(s, ctx, ox, oy, A) {
+              const h = GH * Math.min(1, s.t / 0.08), f = 1 - Math.max(0, s.t - 0.45) / 0.35, x = s.x + ox, gy2 = s.gy + oy;
+              A.alpha(ctx, f, () => {
+                for (let yy = 0; yy < h; yy++) { const ww = w * (0.55 + 0.45 * (yy / GH)) + Math.sin(yy * 0.4 + s.t * 30) * 1.5; A.px(ctx, x - ww, gy2 - yy, ww * 2, 1, (yy + Math.floor(s.t * 60)) % 6 < 2 ? s.pal.l : s.pal.c); }
+                A.px(ctx, x - 1, gy2 - h, 3, h, '#e8f8ff');
+                for (let i = 0; i < 7; i++) { const a = -Math.PI / 2 + (i - 3) * 0.4, rr = 6 + Math.sin(s.t * 20 + i) * 2; A.disc(ctx, x + Math.cos(a) * rr * 1.5, gy2 - h + Math.sin(a) * rr * 0.8, 2, i % 2 ? s.pal.l : '#ffffff'); }
+              });
+            },
+          }, { x: e.x - e.dir * 4 });
+          e.dead = true;
         },
         draw(e, ctx, ox, oy, A) {
-          const x = e.x + ox, gy = e.gy + oy;
-          if (!e.bite) { A.tri(ctx, x, gy, 7, 8, e.pal.c, '#c8f0ff'); for (let i = 1; i < 5; i++) A.px(ctx, x - i * 4 * Math.sign(A.p.facing || 1), gy - 1, 2, 1, '#c8f0ff'); return; }
-          const k = (e.t - e.bite) / 0.5; if (k > 1) return; const y = gy - Math.sin(Math.min(1, k) * Math.PI) * 26;
-          A.alpha(ctx, 1 - Math.max(0, k - 0.6) / 0.4, () => { A.disc(ctx, x, y, 7, e.pal.c, '#3a8aff'); A.px(ctx, x - 7, y, 14, 3, e.pal.c); A.tri(ctx, x, y - 6, 6, 6, e.pal.c); for (let i = -2; i <= 2; i++) A.px(ctx, x + i * 2 + 3, y + 2, 1, 2, '#ffffff'); A.px(ctx, x + 4, y - 2, 1, 1, '#05030a'); A.px(ctx, x - 10, y - 2, 3, 5, e.pal.c); });
+          const x = e.x + ox, y = e.y + oy, d = e.dir, L = 26 * H.sc(e);
+          W.beam(ctx, A, x - d * L, y, x, y, 2, e.pal.c, '#c8f0ff');
+          for (const dy of [-5, 0, 5]) { W.beam(ctx, A, x, y + dy, x + d * 8, y + dy, 1, e.pal.c, '#c8f0ff'); A.px(ctx, x + d * 9, y + dy, 2, 1, '#ffffff'); }
+          W.beam(ctx, A, x, y - 5, x, y + 5, 1, e.pal.c, '#c8f0ff');
+          for (let i = 0; i < 5; i++) A.alpha(ctx, 0.7 - i * 0.12, () => A.px(ctx, x - d * (L + 3 + i * 4), y + Math.sin(e.t * 40 + i) * 2, 3, 1, i % 2 ? e.pal.c : '#c8f0ff'));
+        },
+      },
+      {
+        name: 'Shark Fin', dmg: 26, cd: 6, mp: 6, kind: 'custom', life: 1.5,
+        desc: 'A fin of water cuts along the ground towards the nearest enemy... then a shark bursts out and bites everything around it.',
+        spawn(e, g, A) { H.at(e, A, 10); e.gy = H.floor(A, e.x); e.tg = A.near(e.x, e.y, 200); e.mv = e.dir; A.sfx('whoosh'); },
+        update(e, dt, g, A) {
+          if (e.bite) return;
+          const tx = e.tg && !e.tg.dead ? A.center(e.tg).x : e.x + e.dir * 200;
+          e.mv = Math.sign(tx - e.x) || e.mv; e.x += e.mv * 210 * dt; e.gy = A.ground(e.x, e.gy - 12);
+          if (Math.random() < dt * 25) splash(A, e, e.x - e.mv * 4, e.gy - 2, 1, 50);
+          if (Math.abs(tx - e.x) < 6 || e.t > 0.9) {
+            const s = H.sc(e);
+            e.bite = e.t; A.sfx('crash'); A.shake(4, 0.25);
+            A.hit(e, { x: e.x - 20 * s, y: e.gy - 40 * s, w: 40 * s, h: 40 * s }, { kb: 1.2, onHit(t) { if (t.applyStatus) t.applyStatus('launch', 0); } });
+            A.spawn(e, W.SHOCK, { x: e.x, y: e.gy - 3, r: 26 * s, flat: 0.45, dmg: 0 }); splash(A, e, e.x, e.gy - 2, 20, 150);
+          }
+        },
+        draw(e, ctx, ox, oy, A) {
+          const x = e.x + ox, gy = e.gy + oy, s = H.sc(e), d = e.mv;
+          if (!e.bite) { A.tri(ctx, x, gy, 12 * s, 14 * s, e.pal.c, '#c8f0ff'); A.px(ctx, x - 1, gy - 14 * s, 2, 3, '#ffffff'); for (let i = 1; i < 9; i++) A.alpha(ctx, 1 - i / 9, () => A.px(ctx, x - d * i * 4 - 1, gy - 1 - Math.abs(Math.sin(e.t * 20 + i)) * 2, 3, 2, i % 2 ? '#c8f0ff' : '#ffffff')); return; }
+          const k = (e.t - e.bite) / 0.55;
+          if (k > 1) return;
+          const y = gy - 6 - Math.sin(Math.min(1, k) * Math.PI) * 30 * s, R = Math.round(10 * s), jaw = Math.max(0, Math.sin(Math.min(1, k * 1.6) * Math.PI)) * 5 * s, body = d > 0 ? x - R * 2.2 : x;
+          A.alpha(ctx, 1 - Math.max(0, k - 0.65) / 0.35, () => {
+            A.px(ctx, body, y - R * 0.5, R * 2.2, R, e.pal.c);
+            A.px(ctx, body, y + R * 0.1, R * 2.2, R * 0.4, '#e8f8ff');
+            A.disc(ctx, x, y, R, e.pal.c, '#3a8aff');
+            A.tri(ctx, x - d * R * 0.8, y - R * 0.45, 9 * s, 9 * s, e.pal.c);
+            A.tri(ctx, x - d * R * 2.6, y + 7 * s, 9 * s, 14 * s, e.pal.c, '#3a8aff');
+            A.px(ctx, x + d * R * 0.35, y - R * 0.45, 2, 2, '#05030a');
+            A.px(ctx, d > 0 ? x : x - R - 1, y - 1 - jaw * 0.5, R + 1, jaw + 2, '#0e1a4a');
+            for (let i = 0; i < 4; i++) { const tx = x + d * (R * 0.2 + i * 2.5); A.px(ctx, tx, y - 1 - jaw * 0.5, 1, 2, '#ffffff'); A.px(ctx, tx, y + jaw * 0.5, 1, 2, '#ffffff'); }
+          });
         },
       },
       {
         name: 'Abyssal Current', dmg: 6, cd: 8, mp: 6, kind: 'custom', life: 2.5,
-        desc: 'Open a powerful current ahead that drags enemies along and slams them into walls.',
+        desc: 'Open a raging current ahead that drags enemies along and slams them into walls.',
         spawn(e, g, A) { H.at(e, A, 50); e.gy = H.floor(A, e.x); A.sfx('whoosh'); },
-        update(e, dt, g, A) { const R = 60 * H.sc(e); for (const t of A.targets()) { if (t.tutorial) continue; const c = A.center(t); if (Math.abs(c.x - e.x) < R && Math.abs(c.y - (e.gy - 12)) < 22) { t.vx = U.approach(t.vx, e.dir * 220, 6, dt); if (A.solid(c.x + e.dir * (t.box.w / 2 + 3), c.y) && !t._slam) { t._slam = true; A.damage(e, t, 3, 0.5); A.sfx('crash', { minGap: 0.1 }); } } } A.tick(e, { x: e.x - R, y: e.gy - 24, w: R * 2, h: 24 }, 0.4, { kb: 0 }); },
+        update(e, dt, g, A) { const R = 60 * H.sc(e); for (const t of A.targets()) { if (t.tutorial) continue; const c = A.center(t); if (Math.abs(c.x - e.x) < R && Math.abs(c.y - (e.gy - 12)) < 24) { t.vx = U.approach(t.vx, e.dir * 220, 6, dt); if (A.solid(c.x + e.dir * (t.box.w / 2 + 3), c.y) && !t._slam) { t._slam = true; A.damage(e, t, 3, 0.5); A.sfx('crash', { minGap: 0.1 }); A.shake(3, 0.2); A.spawn(e, W.SHOCK, { x: c.x + e.dir * 6, y: c.y, r: 22, flat: 1.3, dmg: 0 }); splash(A, e, c.x, c.y, 10, 120); } } } A.tick(e, { x: e.x - R, y: e.gy - 26, w: R * 2, h: 26 }, 0.4, { kb: 0 }); },
         onEnd(e, A) { for (const t of A.targets()) delete t._slam; },
-        draw(e, ctx, ox, oy, A) { const R = 60 * H.sc(e), x = e.x + ox, gy = e.gy + oy; A.alpha(ctx, A.fade(e, 0.2, 0.4) * 0.8, () => { for (let i = 0; i < 18; i++) { const xx = ((i * 23 + e.t * 260 * e.dir) % (R * 2) + R * 2) % (R * 2) - R, yy = gy - 4 - (i * 7) % 20; A.line(ctx, x + xx, yy, x + xx + e.dir * 8, yy + Math.sin(i + e.t * 9), i % 3 ? e.pal.c : '#c8f0ff'); } }); },
+        draw(e, ctx, ox, oy, A) {
+          const R = 60 * H.sc(e), x = e.x + ox, gy = e.gy + oy, f = A.fade(e, 0.2, 0.4), d = e.dir, top = (xx) => 18 + Math.sin(xx * 0.08 - e.t * 9 * d) * 4 + Math.sin(xx * 0.21 + e.t * 5) * 2;
+          A.alpha(ctx, f * 0.35, () => { for (let xx = -R; xx < R; xx += 2) { const h = top(xx); A.px(ctx, x + xx, gy - h, 2, h, e.pal.c); } });
+          A.alpha(ctx, f, () => {
+            for (let xx = -R; xx < R; xx += 2) A.px(ctx, x + xx, gy - top(xx), 2, 1, (xx + Math.floor(e.t * 40)) % 8 < 3 ? '#ffffff' : '#c8f0ff');
+            for (let i = 0; i < 22; i++) { const xx = ((i * 23 + e.t * 300 * d) % (R * 2) + R * 2) % (R * 2) - R, yy = gy - 3 - (i * 7) % 16; A.line(ctx, x + xx, yy, x + xx + d * 10, yy + Math.sin(i + e.t * 9), i % 3 ? e.pal.l : '#ffffff'); }
+            for (let i = 0; i < 8; i++) { const yy = gy - ((e.t * 30 + i * 11) % 18), xx = ((i * 37 + e.t * 120 * d) % (R * 2) + R * 2) % (R * 2) - R; A.ring(ctx, x + xx, yy, 1, '#e8f8ff'); }
+          });
+        },
       },
       {
         name: 'Jellyfish Swarm', dmg: 9, cd: 8, mp: 6, kind: 'custom', life: 4,
@@ -277,17 +362,20 @@
       },
       {
         name: 'Whale Tail', dmg: 34, cd: 9, mp: 8, kind: 'custom', life: 1.4,
-        desc: 'A spectral whale swims through the air above you and slams its tail down on the enemy.',
+        desc: 'A spectral whale swims through the air above you and slams its tail down on the enemy, flooding the ground around it.',
         spawn(e, g, A) { H.at(e, A, 0); const ax = A.aim(e, 160); e.tx = ax !== null ? ax : e.x + e.dir * 70; e.gy = H.floor(A, e.tx); e.top = H.sky(A, e.tx, A.p.y - 10) + 10; A.sfx('surge'); },
-        update(e, dt, g, A) { if (e.t > 0.75 && !e.slam) { e.slam = true; A.hit(e, { x: e.tx - 26, y: e.gy - 50, w: 52, h: 50 }, { kb: 1.5 }); A.sfx('crash'); A.shake(5, 0.3); splash(A, e, e.tx, e.gy - 2, 18, 140); } },
+        update(e, dt, g, A) { if (e.t > 0.75 && !e.slam) { e.slam = true; const s = H.sc(e); A.hit(e, { x: e.tx - 32 * s, y: e.gy - 60, w: 64 * s, h: 60 }, { kb: 1.5 }); W.boom(A, e, e.tx, e.gy - 6, 30 * s, { mult: 0.5, flat: 0.5 }); A.sfx('crash'); A.shake(6, 0.35); splash(A, e, e.tx, e.gy - 2, 26, 170); } },
         draw(e, ctx, ox, oy, A) {
-          const q = Math.min(1, e.t / 0.75), wx = e.tx - e.dir * (90 - q * 70) + ox, wy = e.top + oy + Math.sin(q * Math.PI) * 8;
-          A.alpha(ctx, (e.slam ? 1 - (e.t - 0.75) / 0.65 : Math.min(1, e.t * 4)) * 0.75, () => {
-            for (let i = 0; i < 30; i++) { const r = Math.sin((i / 30) * Math.PI) * 9; A.px(ctx, wx - e.dir * i, wy - r * 0.6, 1, r * 1.4 + 1, i % 4 ? '#3a8aff' : '#7ad0ff'); }
-            A.px(ctx, wx + e.dir * 1, wy - 3, 1, 1, '#ffffff');
-            const tx = wx - e.dir * 30, ty = e.slam ? e.gy + oy - 8 : wy + Math.sin(e.t * 6) * 4;
-            A.line(ctx, tx, wy, tx - e.dir * 4, ty, '#3a8aff', 3); A.tri(ctx, tx - e.dir * 4, ty + 5, 16, 6, '#7ad0ff');
+          const s = H.sc(e), q = Math.min(1, e.t / 0.75), d = e.dir, L = 56 * s, wx = e.tx - d * (110 - q * 80) * s + ox, wy = e.top + 6 + oy + Math.sin(q * Math.PI) * 10;
+          A.alpha(ctx, (e.slam ? 1 - (e.t - 0.75) / 0.65 : Math.min(1, e.t * 4)) * 0.85, () => {
+            for (let i = 0; i < L; i++) { const q2 = i / L, r = Math.sin(Math.pow(q2, 0.7) * Math.PI) * 11 * s + 1; A.px(ctx, wx - d * i, wy - r * 0.7, 1, r * 1.5, (i + Math.floor(e.t * 20)) % 9 ? '#2a6aff' : '#7ad0ff'); A.px(ctx, wx - d * i, wy + r * 0.8 - 1, 1, 1, '#c8f0ff'); }
+            A.px(ctx, wx - d * 8 * s, wy - 4, 2, 2, '#ffffff');
+            A.tri(ctx, wx - d * 20 * s, wy + 12 * s, 7 * s, 6 * s, '#3a8aff');
+            const tx = wx - d * L, ty = e.slam ? e.gy + oy - 10 : wy + Math.sin(e.t * 6) * 5;
+            W.beam(ctx, A, tx, wy, tx - d * 4, ty, 3 * s, '#3a8aff', '#7ad0ff');
+            for (let i = -12; i <= 12; i++) A.px(ctx, tx - d * 4 + i * s, ty + Math.abs(i) * 0.35 * s - 2, 1, 4, Math.abs(i) > 9 ? '#c8f0ff' : '#3a8aff');
           });
+          if (e.slam) { const k = (e.t - 0.75) / 0.65; A.alpha(ctx, 1 - k, () => { for (const sd of [-1, 1]) for (let i = 0; i < 3; i++) A.tri(ctx, e.tx + ox + sd * (10 + k * 70 * s + i * 4), e.gy + oy, 8, 6 + (2 - i) * 3, i ? '#3a8aff' : '#c8f0ff'); }); }
         },
       },
     ],
@@ -306,22 +394,50 @@
       run(A, e0) {
         const p = A.p;
         A.spawn(e0, {
-          life: 3.6,
-          spawn(e) { e.x = p.cx; e.top = A.top(); e.gy = p.feet; e.ts = H.nearby(A, p.cx, p.y, 320).map((o) => o.t); e.lev = []; A.sfx('surge'); A.sfx('rumble', { dur: 3 }); },
+          life: 4.2,
+          spawn(e) { e.x = p.cx; e.top = A.top(); e.gy = p.feet; e.lev = []; e.spray = []; A.sfx('surge'); A.sfx('rumble', { dur: 3.6 }); },
           update(e, dt, g, A) {
-            // 1) the ocean falls
-            if (e.t > 0.5 && !e.fall) { e.fall = true; A.hitR(e, e.x + e.dir * 60, e.gy - 40, 150, { mult: 1.5, kb: 0.5, onHit(t) { if (t.applyStatus) t.applyStatus('wet', 0); } }); A.sfx('crash'); A.shake(8, 0.5); e.hit.clear(); }
-            // 2) the Leviathan tears through
-            if (e.t > 0.8 && e.t < 2.0) { const q = (e.t - 0.8) / 1.2; e.hx = U.lerp(p.cx - e.dir * 120, p.cx + e.dir * 320, q); e.hy = e.gy - 30 - Math.sin(q * Math.PI * 2) * 30; e.lev.unshift({ x: e.hx, y: e.hy }); if (e.lev.length > 40) e.lev.pop(); A.tickR(e, e.hx, e.hy, 22, 0.25, { mult: 0.9, kb: 0.8 }); }
+            const splash = (x, y, n, sp) => { for (let i = 0; i < n; i++) e.spray.push({ x, y, vx: A.rnd(-1, 1) * sp, vy: -A.rnd(0.3, 1) * sp * 1.4, t: 0, s: Math.random() < 0.3 ? 2 : 1 }); };
+            for (const s of e.spray) { s.t += dt; s.vy += 500 * dt; s.x += s.vx * dt; s.y += s.vy * dt; }
+            e.spray = e.spray.filter((s) => s.t < 1.4);
+            // 1) the ocean falls out of the sky
+            if (e.t > 0.5 && !e.fall) { e.fall = true; A.hitR(e, e.x + e.dir * 60, e.gy - 40, 170, { mult: 1.5, kb: 0.5, onHit(t) { if (t.applyStatus) t.applyStatus('wet', 0); } }); A.sfx('crash'); A.shake(10, 0.6); e.hit.clear(); for (let i = -6; i <= 6; i++) splash(e.x + i * 30, e.gy - 2, 6, 160); }
+            // 2) the Leviathan breaches: out of the water, one huge arc over the battlefield, and back under
+            if (e.t > 0.9 && e.t < 2.3) {
+              const q = (e.t - 0.9) / 1.4;
+              e.hx = U.lerp(p.cx - e.dir * 160, p.cx + e.dir * 360, q); e.hy = e.gy + 10 - Math.sin(q * Math.PI) * 110;
+              e.lev.unshift({ x: e.hx, y: e.hy }); if (e.lev.length > 56) e.lev.pop();
+              A.tickR(e, e.hx, e.hy, 30, 0.2, { mult: 0.9, kb: 0.8 });
+              if (!e.breach) { e.breach = true; splash(e.hx, e.gy, 30, 220); A.sfx('crash'); }
+              if (!e.dive && q > 0.94) { e.dive = true; splash(e.hx, e.gy, 30, 220); A.shake(8, 0.4); A.sfx('crash'); }
+            }
             // 3) the tsunami
-            if (e.t > 2.0) { if (!e.wave) { e.wave = true; e.hit.clear(); e.wx = p.cx - e.dir * 40; A.sfx('crash'); } e.wx += e.dir * 300 * dt; A.hit(e, { x: e.dir > 0 ? e.wx - 50 : e.wx, y: e.gy - 90, w: 50, h: 90 }, { mult: 3, kb: 3, dir: e.dir }); }
+            if (e.t > 2.3) {
+              if (!e.wave) { e.wave = true; e.hit.clear(); e.wx = p.cx - e.dir * 60; A.sfx('crash'); A.sfx('rumble', { dur: 1.5 }); }
+              e.wx += e.dir * 320 * dt; A.hit(e, { x: e.dir > 0 ? e.wx - 70 : e.wx, y: e.gy - 150, w: 70, h: 150 }, { mult: 3.4, kb: 3, dir: e.dir });
+              if (Math.random() < dt * 30) splash(e.wx, e.gy - 140, 3, 120);
+              A.shake(3, 0.05);
+            }
           },
           draw(e, ctx, ox, oy, A) {
-            const gy = e.gy + oy;
-            if (e.t < 1.1) { const q = Math.min(1, e.t / 0.5), y = U.lerp(e.top + oy - 60, gy - 40, q * q); A.alpha(ctx, e.fall ? Math.max(0, 1 - (e.t - 0.5) / 0.6) : 0.9, () => { for (let i = -200; i < 200; i += 3) A.px(ctx, e.x + ox + i, y - 30 + Math.sin(i * 0.1 + e.t * 8) * 4, 3, 60, (i / 3) % 5 ? e.pal.c : '#0e2a8a'); }); }
-            e.lev.forEach((s, i) => { const r = Math.max(2, 18 - i * 0.35); A.alpha(ctx, 0.75, () => A.disc(ctx, s.x + ox, s.y + oy, Math.round(r), i % 4 ? '#3a8aff' : '#7ad0ff', i < 2 ? '#c8f0ff' : null)); if (i % 5 === 0) A.tri(ctx, s.x + ox, s.y + oy - r + 1, 6, 6, '#7ad0ff'); });
-            if (e.lev[0] && e.t < 2.0) { const h = e.lev[0], d = e.dir; A.px(ctx, h.x + ox + d * 12, h.y + oy - 6, 3, 3, '#ffffff'); A.px(ctx, h.x + ox + d * 14, h.y + oy - 5, 1, 1, '#ff3a4a'); for (let i = -3; i <= 3; i++) A.px(ctx, h.x + ox + d * (16 + Math.abs(i)), h.y + oy + i * 2, 2, 1, '#ffffff'); }
-            if (e.wave) { const x = e.wx + ox, d = e.dir; for (let i = 0; i < 60; i++) { const h = 90 * Math.sin(Math.min(1, i / 50) * Math.PI / 2); A.px(ctx, x - d * i, gy - h, 1, h, i % 6 ? e.pal.c : '#0e2a8a'); } for (let i = 0; i < 16; i++) A.px(ctx, x - d * 4 + Math.sin(e.t * 20 + i) * 4, gy - 90 + i * 2, 3, 2, '#ffffff'); }
+            const gy = e.gy + oy, d = e.dir;
+            // the ocean coming down
+            if (e.t < 1.2) { const q = Math.min(1, e.t / 0.5), y = U.lerp(e.top + oy - 80, gy - 50, q * q); A.alpha(ctx, e.fall ? Math.max(0, 1 - (e.t - 0.5) / 0.7) : 0.92, () => { for (let i = -260; i < 260; i += 3) A.px(ctx, e.x + ox + i, y - 40 + Math.sin(i * 0.1 + e.t * 8) * 5, 3, 80, (i / 3) % 5 ? e.pal.c : '#0e2a8a'); for (let i = -260; i < 260; i += 7) A.px(ctx, e.x + ox + i, y - 42 + Math.sin(i * 0.1 + e.t * 8) * 5, 4, 2, '#c8f0ff'); }); }
+            // the Leviathan: a long body with fins all down its back, and a head that is mostly jaws
+            for (let i = e.lev.length - 1; i >= 0; i--) { const s = e.lev[i], r = Math.max(3, 26 - i * 0.42); A.alpha(ctx, 0.88, () => A.disc(ctx, s.x + ox, s.y + oy, Math.round(r), i % 4 ? '#2a6aff' : '#5ab0ff', '#9ad8ff')); if (i % 4 === 0 && i > 2) A.tri(ctx, s.x + ox, s.y + oy - r + 2, 8, Math.max(2, 10 - i * 0.12), '#7ad0ff', '#ffffff'); }
+            if (e.lev[0] && e.t < 2.3) {
+              const h = e.lev[0], x = h.x + ox, y = h.y + oy, open = 6 + Math.sin(e.t * 12) * 4;
+              for (let i = 0; i < 30; i++) { const w = Math.max(1, 14 - i * 0.45); A.px(ctx, x + d * (10 + i), y - open - w, 1, w, i % 5 ? '#3a8aff' : '#1a4aaa'); A.px(ctx, x + d * (10 + i), y + open, 1, w * 0.8, i % 5 ? '#2a6aff' : '#1a4aaa'); if (i % 3 === 0) { A.px(ctx, x + d * (10 + i), y - open, 1, 3, '#ffffff'); A.px(ctx, x + d * (10 + i), y + open - 2, 1, 2, '#ffffff'); } }
+              A.disc(ctx, x + d * 14, y - open - 8, 3, '#ff3a4a', '#ffffff');
+            }
+            // the tsunami, with its crest curling over
+            if (e.wave) {
+              const x = e.wx + ox;
+              for (let i = 0; i < 90; i++) { const h = 150 * Math.sin(Math.min(1, i / 70) * Math.PI / 2); A.px(ctx, x - d * i, gy - h, 1, h, i % 6 ? e.pal.c : '#0e2a8a'); }
+              for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 1.2; A.px(ctx, x + d * Math.sin(a) * 18 - d * 6, gy - 132 - Math.cos(a) * 18, 3, 3, i % 3 ? '#e8f8ff' : '#ffffff'); }
+              for (let i = 0; i < 24; i++) A.px(ctx, x - d * 4 + Math.sin(e.t * 20 + i) * 5, gy - 150 + i * 6, 3, 2, '#ffffff');
+            }
+            for (const s of e.spray) A.alpha(ctx, 1 - s.t / 1.4, () => A.px(ctx, s.x + ox, s.y + oy, s.s, s.s, s.s > 1 ? '#ffffff' : '#9ad8ff'));
           },
         }, {});
       },
@@ -332,7 +448,7 @@
   const GUST = { life: 0.4, update(e, dt) { e.x += e.vx * dt; }, draw(e, ctx, ox, oy, A) { A.alpha(ctx, 1 - e.t / e.life, () => A.px(ctx, e.x + ox, e.y + oy, e.len || 6, 1, e.c || e.pal.l)); } };
   AW.wind = {
     color: '#2affc8', up: '#ffffff', status: 'launch', fx: 'gusts', block: ['Gale Shroud', 'swirl'],
-    icons: ['vacuum', 'splitter', 'pressure', 'feathers', 'cage'],
+    icons: ['splitter', 'pressure', 'feathers', 'downburst', 'airPrison'],
     look: { fx(ctx, F) { for (let i = 0; i < 3; i++) { const y = F.y - 6 - i * 7, x = F.x - F.d * (8 + ((F.t * 40 + i * 9) % 12)); F.A.alpha(ctx, 0.6, () => F.A.px(ctx, x, y, 4, 1, '#c8fff0')); } } },
     idle: {
       pose: (t) => Object.assign(IDLE.crossed(t, { lean: 0 }), { lift: 3 + Math.sin(t * 2) * 1.5 }),
@@ -355,18 +471,36 @@
     },
     m1: {
       name: 'Vacuum Palm', dmg: 8, cd: 0.36, kind: 'custom', life: 0.6,
-      desc: 'Thrust your palm and fire a bullet of compressed air that bends the light around it.',
-      spawn(e, g, A) { H.at(e, A, 10, -1); e.vx = e.dir * 300; A.sfx('whoosh', { minGap: 0.04 }); },
-      update(e, dt, g, A) { const r = H.fly(e, dt, A, { r: 4, kb: 1.4 }); if (r) { A.puff(e, e.x, e.y, 5); e.dead = true; } },
-      draw(e, ctx, ox, oy, A) { const x = e.x + ox, y = e.y + oy, r = (e.up ? 5 : 4) + Math.sin(e.t * 50); A.ring(ctx, x, y, r, e.pal.c, r * 1.2); A.ring(ctx, x, y, r - 2, '#ffffff', r - 1); for (let i = 1; i < 4; i++) A.alpha(ctx, 0.4 - i * 0.1, () => A.ring(ctx, x - e.dir * i * 5, y, r - i * 0.6, e.pal.l, r)); },
+      desc: 'Thrust your palm and fire a bullet of compressed air that bends the light around it, then bursts on impact.',
+      spawn(e, g, A) { H.at(e, A, 10, -1); e.vx = e.dir * 320; A.sfx('whoosh', { minGap: 0.04 }); for (let i = 0; i < 6; i++) A.spawn(e, GUST, { x: e.x, y: e.y + A.rnd(-6, 6), vx: e.dir * A.rnd(60, 160), len: A.rnd(4, 8), c: i % 2 ? '#ffffff' : e.pal.l, dmg: 0 }); },
+      update(e, dt, g, A) { const r = H.fly(e, dt, A, { r: 6, kb: 1.4 }); if (r) { A.hitR(e, e.x, e.y, 16 * H.sc(e), { mult: 0.5, kb: 1 }); A.spawn(e, W.SHOCK, { x: e.x, y: e.y, r: 16 * H.sc(e), dmg: 0, life: 0.3 }); A.puff(e, e.x, e.y, 6); e.dead = true; } },
+      draw(e, ctx, ox, oy, A) {
+        const x = e.x + ox, y = e.y + oy, s = H.sc(e), r = (5 + Math.sin(e.t * 50) * 0.8) * s, d = e.dir;
+        for (let i = 1; i < 6; i++) A.alpha(ctx, 0.55 - i * 0.08, () => A.px(ctx, x - d * (i * 6 + 4) - (d > 0 ? 6 : 0), y - r + ((i * 5) % Math.max(1, Math.round(r * 2))), 6, 1, i % 2 ? '#ffffff' : e.pal.l));
+        A.alpha(ctx, 0.3, () => A.disc(ctx, x, y, Math.round(r + 2), e.pal.c));
+        A.ring(ctx, x, y, r, e.pal.c, r * 1.15); A.ring(ctx, x, y, r - 1, e.pal.l, (r - 1) * 1.15); A.ring(ctx, x, y, Math.max(1, r - 3), '#ffffff', Math.max(1, r - 2));
+        A.disc(ctx, x, y, Math.max(1, Math.round(r * 0.35)), '#ffffff');
+      },
     },
     s: [
       {
         name: 'Sky Splitter', dmg: 20, cd: 5, mp: 6, kind: 'custom', life: 0.6,
-        desc: 'A huge vertical crescent of wind sweeps up, then crashes down in front of you.',
+        desc: 'A huge vertical crescent of wind sweeps up, then crashes down in front of you and blasts outward along the ground.',
         spawn(e, g, A) { H.at(e, A, 26); e.gy = H.floor(A, e.x); A.sfx('swing'); },
-        update(e, dt, g, A) { const h = 70 * H.sc(e); A.hit(e, { x: e.x - 12, y: e.gy - h, w: 24, h }, { kb: 1, onHit(t) { if (t.applyStatus) t.applyStatus('launch', 0); } }); if (e.t > 0.3 && !e.down) { e.down = true; e.hit.clear(); A.sfx('swing'); } if (e.down) A.hit(e, { x: e.x - 12, y: e.gy - h, w: 24, h }, { kb: 1.4, mult: 0.8 }); },
-        draw(e, ctx, ox, oy, A) { const h = 70 * H.sc(e), x = e.x + ox, gy = e.gy + oy, up = e.t < 0.3, k = up ? e.t / 0.3 : (e.t - 0.3) / 0.3; A.alpha(ctx, 1 - (up ? 0 : k * 0.8), () => { for (let i = 0; i < 26; i++) { const q = i / 26, yy = gy - q * h * (up ? k : 1), w = Math.sin(q * Math.PI) * 9; A.px(ctx, x - w, yy, 2, 1, e.pal.c); A.px(ctx, x - w + 2, yy, 1, 1, '#ffffff'); } }); },
+        update(e, dt, g, A) { const h = 70 * H.sc(e), w = 32 * H.sc(e); A.hit(e, { x: e.x - w / 2, y: e.gy - h, w, h }, { kb: 1, onHit(t) { if (t.applyStatus) t.applyStatus('launch', 0); } }); if (e.t > 0.3 && !e.down) { e.down = true; e.hit.clear(); A.sfx('swing'); W.boom(A, e, e.x, e.gy - 4, 30 * H.sc(e), { mult: 0.5, flat: 0.4 }); } if (e.down) A.hit(e, { x: e.x - w / 2, y: e.gy - h, w, h }, { kb: 1.4, mult: 0.8 }); },
+        draw(e, ctx, ox, oy, A) {
+          const h = 70 * H.sc(e), x = e.x + ox, gy = e.gy + oy, up = e.t < 0.3, k = up ? e.t / 0.3 : (e.t - 0.3) / 0.3, d = e.dir;
+          A.alpha(ctx, 1 - (up ? 0 : k * 0.85), () => {
+            const reach = up ? k : 1, n = 40;
+            for (let i = 0; i <= n; i++) {
+              const q = i / n;
+              if (q > reach) break;
+              const yy = gy - q * h, bulge = Math.sin(q * Math.PI) * 14 * H.sc(e) * (up ? 1 : 1 - k * 0.6), th = Math.max(1, Math.round(Math.sin(q * Math.PI) * 7)), xx = x + d * bulge;
+              A.px(ctx, d > 0 ? xx - th : xx, yy, th, 2, e.pal.c); A.px(ctx, d > 0 ? xx : xx - 1, yy, 1, 2, '#ffffff');
+            }
+            if (!up) for (const s of [-1, 1]) for (let i = 0; i < 3; i++) A.px(ctx, x + s * (8 + k * 46 + i * 5) - 3, gy - 3 - i * 2, 6, 1, i ? e.pal.c : '#ffffff');
+          });
+        },
       },
       {
         name: 'Pressure Bomb', dmg: 28, cd: 7, mp: 6, kind: 'custom', life: 1.2,
@@ -377,22 +511,56 @@
       },
       {
         name: 'Tempest Feathers', dmg: 7, cd: 5, mp: 5, kind: 'custom', life: 0.01,
-        desc: 'A fan of razor-sharp feathers made of wind, curving towards your enemies.',
-        spawn(e, g, A) { H.at(e, A, 6, -3); A.sfx('whoosh'); const n = e.up ? 9 : 7; for (let i = 0; i < n; i++) { const a = U.lerp(-0.7, 0.7, i / (n - 1)); A.spawn(e, H.proj((b, ctx, ox, oy, A) => { const x = b.x + ox, y = b.y + oy, an = Math.atan2(b.vy, b.vx), c = Math.cos(an), s = Math.sin(an); A.line(ctx, x - c * 5, y - s * 5, x + c * 3, y + s * 3, b.pal.c); for (let k = 1; k < 4; k++) A.px(ctx, x - c * k * 1.4 - s * 1.5, y - s * k * 1.4 + c * 1.5, 1, 1, '#ffffff'); }, { life: 1, r: 3, homing: 4 }), { vx: Math.cos(a) * 260 * e.dir, vy: Math.sin(a) * 260 }); } },
+        desc: 'A wide fan of razor-sharp feathers made of wind, curving towards your enemies.',
+        spawn(e, g, A) {
+          H.at(e, A, 6, -3); A.sfx('whoosh');
+          const n = e.up ? 11 : 8;
+          for (let i = 0; i < n; i++) {
+            const a = U.lerp(-0.8, 0.8, i / (n - 1));
+            A.spawn(e, H.proj((b, ctx, ox, oy, A) => {
+              const x = b.x + ox, y = b.y + oy, an = Math.atan2(b.vy, b.vx), c = Math.cos(an), s = Math.sin(an);
+              W.beam(ctx, A, x - c * 7, y - s * 7, x + c * 4, y + s * 4, 1, b.pal.c, b.pal.l);
+              for (let k = 1; k < 6; k++) { const bx = x - c * k * 1.5, by = y - s * k * 1.5, sp = 1.5 + k * 0.45; A.px(ctx, bx - s * sp, by + c * sp, 1, 1, k % 2 ? '#ffffff' : b.pal.l); A.px(ctx, bx + s * sp, by - c * sp, 1, 1, k % 2 ? b.pal.l : '#ffffff'); }
+            }, { life: 1, r: 4, homing: 4.5, onHit(b, A) { A.spawn(b, W.SHOCK, { x: b.x, y: b.y, r: 9, dmg: 0, life: 0.22 }); } }), { vx: Math.cos(a) * 270 * e.dir, vy: Math.sin(a) * 270 });
+          }
+        },
       },
       {
         name: 'Downburst', dmg: 24, cd: 7, mp: 6, kind: 'custom', life: 0.8,
-        desc: 'A column of air hammers straight down from the sky, crushing enemies and shoving everything aside.',
+        desc: 'A column of air hammers straight down from the sky, crushing enemies and blasting everything around it aside.',
         spawn(e, g, A) { H.at(e, A, 0); const ax = A.aim(e, 140); e.tx = ax !== null ? ax : e.x + e.dir * 60; e.gy = H.floor(A, e.tx); e.top = H.sky(A, e.tx, e.gy - 8); A.sfx('whoosh'); },
-        update(e, dt, g, A) { if (e.t > 0.2 && !e.hitd) { e.hitd = true; A.hit(e, { x: e.tx - 14, y: e.top, w: 28, h: e.gy - e.top }, { kb: 0.2, onHit(t) { if (!t.tutorial) t.vy = 400; } }); A.hitR(e, e.tx, e.gy - 6, 50 * H.sc(e), { mult: 0.5, kb: 2 }); A.sfx('shockwave'); A.shake(4, 0.25); } },
-        draw(e, ctx, ox, oy, A) { const x = e.tx + ox, gy = e.gy + oy, top = e.top + oy, k = e.t / e.life; A.alpha(ctx, 1 - k, () => { for (let i = 0; i < 14; i++) { const xx = x - 12 + ((i * 7) % 24), yy = top + ((e.t * 600 + i * 31) % (gy - top)); A.px(ctx, xx, yy, 1, 10, i % 3 ? e.pal.c : '#ffffff'); } if (e.hitd) for (const s of [-1, 1]) for (let i = 0; i < 4; i++) A.px(ctx, x + s * (14 + k * 50 + i * 3), gy - 2 - i, 6, 1, e.pal.l); }); },
+        update(e, dt, g, A) { if (e.t > 0.2 && !e.hitd) { e.hitd = true; A.hit(e, { x: e.tx - 16, y: e.top, w: 32, h: e.gy - e.top }, { kb: 0.2, onHit(t) { if (!t.tutorial) t.vy = 400; } }); W.boom(A, e, e.tx, e.gy - 6, 50 * H.sc(e), { mult: 0.5, flat: 0.4 }); A.sfx('shockwave'); A.g.dust(e.tx, e.gy, 10); } },
+        draw(e, ctx, ox, oy, A) {
+          const x = e.tx + ox, gy = e.gy + oy, top = e.top + oy, k = e.t / e.life, pre = Math.min(1, e.t / 0.2);
+          A.alpha(ctx, (1 - k) * 0.25, () => A.px(ctx, x - 16 * pre, top, 32 * pre, gy - top, e.pal.c));
+          A.alpha(ctx, 1 - k, () => {
+            for (let i = 0; i < 18; i++) { const xx = x - 14 + ((i * 7) % 28), yy = top + ((e.t * 650 + i * 31) % Math.max(1, gy - top)); A.px(ctx, xx, yy, i % 4 ? 1 : 2, 12, i % 3 ? e.pal.c : '#ffffff'); }
+            if (e.hitd) for (const s of [-1, 1]) for (let i = 0; i < 4; i++) A.px(ctx, x + s * (14 + k * 56 + i * 3) - 3, gy - 2 - i, 6, 1, i ? e.pal.l : '#ffffff');
+          });
+        },
       },
       {
         name: 'Air Prison', dmg: 8, cd: 9, mp: 7, kind: 'custom', life: 2,
-        desc: 'Wrap the nearest enemy in a cage of spinning wind blades. Every turn slices it again.',
+        desc: 'Wrap the nearest enemy in a cage of spinning wind blades that drags its friends in too. Every turn slices. Then it bursts.',
         spawn(e, g, A) { const t = A.near(A.p.cx, A.p.y, 160); e.tg = t; if (!t) { e.dead = true; return; } if (t.applyStatus) { t.applyStatus('stagger', 0); if (t.status.stagger) t.status.stagger.t = e.life; } A.sfx('whoosh'); },
-        update(e, dt, g, A) { if (!e.tg || e.tg.dead) { e.dead = true; return; } if (!e.tg.tutorial) e.tg.vx = 0; e.ct = (e.ct || 0) - dt; if (e.ct <= 0) { e.ct = 0.25; A.damage(e, e.tg, 1, 0); A.sfx('swing', { minGap: 0.05 }); } },
-        draw(e, ctx, ox, oy, A) { if (!e.tg) return; const c = A.center(e.tg), x = c.x + ox, y = c.y + oy; A.alpha(ctx, A.fade(e, 0.1, 0.3), () => { for (let i = 0; i < 4; i++) { const a = e.t * 9 + i * 1.57; A.arc(ctx, x, y, 14, 1, i % 2 ? e.pal.c : '#ffffff', 1, a, a + 0.9); } for (let i = 0; i < 6; i++) { const a = e.t * 9 + i; A.px(ctx, x + Math.cos(a) * 14, y + Math.sin(a) * 14, 1, 1, '#ffffff'); } }); },
+        update(e, dt, g, A) {
+          if (!e.tg || e.tg.dead) { e.dead = true; return; }
+          if (!e.tg.tutorial) e.tg.vx = 0;
+          const c = A.center(e.tg);
+          for (const o of H.nearby(A, c.x, c.y, 70)) if (o.t !== e.tg && !o.t.tutorial) o.t.vx = U.approach(o.t.vx, Math.sign(c.x - o.c.x) * 90, 5, dt);
+          A.tickR(e, c.x, c.y, 20 * H.sc(e), 0.25, { kb: 0 });
+          e.ct = (e.ct || 0) - dt; if (e.ct <= 0) { e.ct = 0.25; A.sfx('swing', { minGap: 0.05 }); }
+        },
+        onEnd(e, A) { if (!e.tg || e.tg.dead) return; const c = A.center(e.tg); W.boom(A, e, c.x, c.y, 30 * H.sc(e), { mult: 1.6 }); },
+        draw(e, ctx, ox, oy, A) {
+          if (!e.tg) return;
+          const c = A.center(e.tg), x = c.x + ox, y = c.y + oy, R = 18 * H.sc(e);
+          A.alpha(ctx, A.fade(e, 0.1, 0.3), () => {
+            A.alpha(ctx, 0.25, () => A.disc(ctx, x, y, Math.round(R), e.pal.c));
+            for (let i = 0; i < 5; i++) { const a = e.t * 10 + i * 1.257; W.smear(ctx, A, x, y, R - (i % 2) * 3, 1, 0.55, i % 2 ? e.pal.c : e.pal.l, 3, a, a + 1.1); }
+            for (let i = 0; i < 10; i++) { const a = -e.t * 7 + i * 0.63, rr = R + 3 + Math.sin(e.t * 9 + i) * 2; A.px(ctx, x + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.9, 2, 1, '#ffffff'); }
+          });
+        },
       },
     ],
     ult: {
@@ -406,22 +574,41 @@
       run(A, e0) {
         const p = A.p;
         A.spawn(e0, {
-          life: 3.4,
-          spawn(e) { const t = A.near(p.cx, p.y, 260); e.cx = t ? A.center(t).x : p.cx + e.dir * 90; e.gy = A.ground(e.cx, p.y + 2); e.top = A.top(); e.bt = 0; e.blades = []; A.sfx('rumble', { dur: 3 }); A.sfx('whoosh'); },
+          life: 3.8,
+          spawn(e) {
+            const t = A.near(p.cx, p.y, 260); e.cx = t ? A.center(t).x : p.cx + e.dir * 90; e.gy = A.ground(e.cx, p.y + 2);
+            e.bt = 0; e.ct = 0.6; e.R = 0; e.blades = []; e.shots = []; e.junk = [];
+            for (let i = 0; i < 44; i++) e.junk.push({ q: Math.random(), a: Math.random() * 6, s: Math.random() < 0.3 ? 2 : 1, star: i % 3 === 0 });
+            A.sfx('rumble', { dur: 3.4 }); A.sfx('whoosh');
+          },
           update(e, dt, g, A) {
-            const R = 60 * Math.min(1, e.t / 0.4);
-            for (const o of H.nearby(A, e.cx, e.gy - 30, 140)) if (!o.t.tutorial) { o.t.vx = U.approach(o.t.vx, Math.sign(e.cx - o.c.x) * 150, 4, dt); if (Math.abs(o.c.x - e.cx) < R) o.t.vy = -140; }
-            A.tick(e, { x: e.cx - R, y: e.top, w: R * 2, h: e.gy - e.top }, 0.18, { mult: 0.45, kb: 0 });
+            const R = e.R = 80 * Math.min(1, e.t / 0.5);
+            for (const o of H.nearby(A, e.cx, e.gy - 30, 190)) if (!o.t.tutorial) { o.t.vx = U.approach(o.t.vx, Math.sign(e.cx - o.c.x) * 170, 5, dt); if (Math.abs(o.c.x - e.cx) < R) o.t.vy = -140; }
+            A.tick(e, { x: e.cx - R, y: A.top(), w: R * 2, h: e.gy - A.top() }, 0.16, { mult: 0.45, kb: 0 });
+            for (const j of e.junk) { j.q = (j.q + dt * 0.35) % 1; j.a += dt * (6 + j.q * 4); }
+            // giant wind blades slicing through the whole cyclone
             e.bt -= dt; for (const b of e.blades) b.t += dt;
-            if (e.t < 2.8 && e.bt <= 0) { e.bt = 0.12; const y = e.gy - A.rnd(10, 110); e.blades.push({ y, d: Math.random() < 0.5 ? 1 : -1, t: 0 }); A.hit(e, { x: e.cx - R, y: y - 6, w: R * 2, h: 12 }, { mult: 0.6 }); e.hit.clear(); A.sfx('swing', { minGap: 0.05 }); }
-            if (e.t > 2.8 && !e.fin) { e.fin = true; A.blast(e, e.cx, e.gy - 40, 90 * H.sc(e), { dmg: e.dmg * 4 }); A.shake(8, 0.4); A.flash(0.3); }
+            if (e.t < 3 && e.bt <= 0) { e.bt = 0.1; const y = e.gy - A.rnd(10, 150); e.blades.push({ y, d: Math.random() < 0.5 ? 1 : -1, t: 0 }); A.hit(e, { x: e.cx - R - 20, y: y - 8, w: R * 2 + 40, h: 16 }, { mult: 0.6 }); e.hit.clear(); A.sfx('swing', { minGap: 0.05 }); }
+            // ...and air cannons blasting out of it
+            e.ct -= dt; if (e.t < 3 && e.ct <= 0) { e.ct = 0.45; e.shots.push({ x: e.cx, y: e.gy - A.rnd(12, 60), d: Math.random() < 0.5 ? 1 : -1, t: 0 }); A.sfx('shockwave', { minGap: 0.1 }); }
+            for (const s of e.shots) { s.t += dt; s.x += s.d * 360 * dt; A.hitR(e, s.x, s.y, 14, { mult: 1, kb: 1.4, dir: s.d }); }
+            if (e.t > 3 && !e.fin) { e.fin = e.t; e.hit.clear(); A.blast(e, e.cx, e.gy - 50, 130 * H.sc(e), { dmg: e.dmg * 6 }); A.shake(12, 0.5); A.flash(0.4); A.sfx('boom'); }
           },
           draw(e, ctx, ox, oy, A) {
-            const x = e.cx + ox, gy = e.gy + oy, top = A.top() + oy, R = 60 * Math.min(1, e.t / 0.4), f = e.t > 3 ? (3.4 - e.t) / 0.4 : 1;
+            const x = e.cx + ox, gy = e.gy + oy, top = A.top() + oy, R = e.R, f = e.t > 3.3 ? (3.8 - e.t) / 0.5 : 1;
+            // wind streaming in from everywhere
+            A.alpha(ctx, 0.5 * f, () => { for (let i = 0; i < 26; i++) { const side = i % 2 ? 1 : -1, ph = (e.t * 1.6 + i / 26) % 1; A.px(ctx, x + side * (300 - ph * 280), gy - ((i * 37) % 200), 14, 1, '#e8fff8'); } });
             A.alpha(ctx, f, () => {
-              for (let i = 0; i < 160; i++) { const q = (i / 160), yy = gy - q * (gy - top), r = R * (0.4 + q * 0.9), a = e.t * 9 + i * 0.37; A.px(ctx, x + Math.cos(a) * r, yy + Math.sin(a) * 2, 2, 1, i % 4 ? e.pal.c : '#ffffff'); }
-              for (const b of e.blades) if (b.t < 0.25) A.alpha(ctx, 1 - b.t / 0.25, () => { A.arc(ctx, x, b.y + oy, R + 10, b.d, '#ffffff', 2, -0.6, 0.6); });
+              // the funnel: layer on layer of spinning wind, wide up in the heavens and thin at the ground
+              A.alpha(ctx, 0.22, () => { for (let yy = top; yy < gy; yy += 2) { const r = R * (0.25 + ((gy - yy) / (gy - top)) * 1.3); A.px(ctx, x - r, yy, r * 2, 1, e.pal.c); } });
+              for (let i = 0; i < 260; i++) { const q = i / 260, yy = gy - q * (gy - top), r = R * (0.25 + q * 1.3), a = e.t * 9 + i * 0.37; A.px(ctx, x + Math.cos(a) * r, yy + Math.sin(a) * 2, 3, 1, i % 4 ? e.pal.c : '#ffffff'); }
+              // rubble and stars dragged up into the heavens
+              for (const j of e.junk) { const yy = gy - j.q * (gy - top), jx = x + Math.cos(j.a) * R * (0.25 + j.q * 1.3) * 0.9; if (j.star) A.star(ctx, jx, yy, 1, '#ffd34d', '#ffffff'); else A.px(ctx, jx, yy, j.s + 1, j.s, '#8a7a6a'); }
+              for (const b of e.blades) if (b.t < 0.25) A.alpha(ctx, 1 - b.t / 0.25, () => { A.arc(ctx, x, b.y + oy, R + 22, b.d, '#ffffff', 3, -0.7, 0.7); A.arc(ctx, x, b.y + oy, R + 16, b.d, e.pal.c, 2, -0.6, 0.6); });
+              for (const s of e.shots) if (s.t < 0.9) { A.ring(ctx, s.x + ox, s.y + oy, 7, '#ffffff', 10); A.ring(ctx, s.x + ox - s.d * 8, s.y + oy, 5, e.pal.c, 8); }
             });
+            // the cyclone bursting apart
+            if (e.fin) { const k = (e.t - e.fin) / 0.8; A.alpha(ctx, Math.max(0, 1 - k), () => { for (let i = 0; i < 18; i++) { const a = (i / 18) * Math.PI * 2; A.line(ctx, x + Math.cos(a) * (10 + k * 60), gy - 50 + Math.sin(a) * (10 + k * 60), x + Math.cos(a) * (30 + k * 200), gy - 50 + Math.sin(a) * (30 + k * 200), i % 2 ? '#ffffff' : e.pal.c, 2); } A.ring(ctx, x, gy - 50, 20 + k * 220, '#ffffff', (20 + k * 220) * 0.6, 2); }); }
           },
         }, {});
       },
@@ -452,11 +639,20 @@
       hit(g, x, y, d) { for (let i = 0; i < 12; i++) dot(g, x, y, d * U.lerp(20, 120, Math.random()), U.lerp(-150, -30, Math.random()), i % 2 ? '#8a6a3a' : '#e0a040', { ay: 520, size: 2 }); },
     },
     m1: {
-      name: 'Tectonic Fist', dmg: 12, cd: 0.48, kind: 'custom', life: 0.3,
+      name: 'Tectonic Fist', dmg: 12, cd: 0.48, kind: 'custom', life: 0.32,
       desc: 'A heavy punch that cracks the ground and sprays a cone of rock shrapnel.',
-      spawn(e, g, A) { H.at(e, A, 0); A.sfx('punchHit', { minGap: 0.05 }); pebbles(A, e, e.x + e.dir * 16, e.y + 4, e.up ? 6 : 4); },
+      spawn(e, g, A) { H.at(e, A, 0); A.sfx('punchHit', { minGap: 0.05 }); e.gy = H.floor(A, e.x + e.dir * 18); pebbles(A, e, e.x + e.dir * 16, e.y + 4, e.up ? 9 : 6); A.spawn(e, W.SHOCK, { x: e.x + e.dir * 18, y: e.y, r: 14 * H.sc(e), dmg: 0, life: 0.25 }); A.g.dust(e.x + e.dir * 18, e.gy, 4); },
       update(e, dt, g, A) { H.at(e, A, 0); const L = 34 * H.sc(e); A.hit(e, { x: e.dir > 0 ? e.x : e.x - L, y: e.y - 10, w: L, h: 22 }, { kb: 1.4 }); },
-      draw(e, ctx, ox, oy, A) { const k = e.t / e.life, x = e.x + ox, y = e.y + oy, d = e.dir, L = 34 * H.sc(e); A.alpha(ctx, 1 - k, () => { for (let i = 0; i < 7; i++) { const a = -0.4 + i * 0.13, r = L * Math.min(1, k * 4); A.px(ctx, x + Math.cos(a) * r * d, y + Math.sin(a) * r, 2, 2, i % 2 ? '#8a6a3a' : e.pal.c); } A.disc(ctx, x + d * 10, y, 4, e.pal.c, e.pal.l); }); },
+      draw(e, ctx, ox, oy, A) {
+        const k = e.t / e.life, x = e.x + ox, y = e.y + oy, d = e.dir, L = 34 * H.sc(e), gy = e.gy + oy;
+        A.alpha(ctx, 1 - k, () => {
+          W.smear(ctx, A, x + d * 4, y, 16 * H.sc(e), d, Math.min(1, k * 3), '#8a6a3a', 4, -1.0, 0.9);
+          for (let i = 0; i < 9; i++) { const a = -0.45 + i * 0.11, r = L * Math.min(1, k * 4) * (0.8 + (i % 3) * 0.1), px = x + Math.cos(a) * r * d, py = y + Math.sin(a) * r; A.px(ctx, px, py, 3, 3, i % 2 ? '#8a6a3a' : e.pal.c); A.px(ctx, px, py, 3, 1, '#c8a870'); }
+          const cl = L * Math.min(1, k * 5);
+          for (let i = 0; i < cl; i += 3) A.px(ctx, x + d * (8 + i) - (d < 0 ? 3 : 0), gy - 1 - ((i * 7) % 3 === 0 ? 1 : 0), 3, 1, '#120a04');
+          A.disc(ctx, x + d * 12, y, 5, '#8a6a3a', e.pal.c);
+        });
+      },
     },
     s: [
       {
@@ -534,7 +730,7 @@
   const ZAP = (ctx, A, x0, y0, x1, y1, col, seed) => { const n = Math.max(3, Math.round(Math.hypot(x1 - x0, y1 - y0) / 6)); let lx = x0, ly = y0; for (let i = 1; i <= n; i++) { const q = i / n, nx = U.lerp(x0, x1, q) + (i < n ? Math.sin(seed * 7 + i * 3.1) * 4 : 0), ny = U.lerp(y0, y1, q) + (i < n ? Math.cos(seed * 5 + i * 2.3) * 4 : 0); A.line(ctx, lx, ly, nx, ny, '#ffffff', 2); A.line(ctx, lx + 1, ly, nx + 1, ny, col, 1); lx = nx; ly = ny; } };
   AW.lightning = {
     color: '#b06aff', up: '#ffd23a', status: 'shock', fx: 'sparks', block: ['Tesla Cage', 'shield'],
-    icons: ['jab', 'plasma', 'hammer', 'rod', 'net'],
+    icons: ['plasma', 'hammer', 'rod', 'overcharge', 'net'],
     look: { fx(ctx, F) { if (Math.floor(F.t * 7) % 3 === 0) { const a = F.at('handF'), b = F.at('headTop'); ZAP(ctx, F.A, a.x, a.y, b.x + F.d * 2, b.y + 4, '#b06aff', Math.floor(F.t * 7)); } } },
     idle: { pose: (t) => IDLE.fists(t), fx(ctx, F) { for (const h of ['handF', 'handB']) { const p = F.at(h); if (Math.random() < 0.5) F.A.px(ctx, p.x + Math.round(Math.random() * 4 - 2), p.y + Math.round(Math.random() * 4 - 2), 1, 1, Math.random() < 0.5 ? '#ffffff' : '#b06aff'); } } },
     run: {
@@ -582,11 +778,16 @@
         draw(e, ctx, ox, oy, A) { const x = e.x + ox, gy = e.gy + oy, top = e.top + oy; A.alpha(ctx, A.fade(e, 0.1, 0.4), () => { A.px(ctx, x - 1, gy - 24, 2, 24, '#8a90a0'); A.px(ctx, x - 1, gy - 26, 2, 2, '#ffffff'); if (e.zap) { ZAP(ctx, A, x, top, x, gy - 26, e.pal.c, Math.floor(e.t * 20)); for (const c of e.arcs || []) ZAP(ctx, A, x, gy - 24, c.x + ox, c.y + oy, e.pal.c, c.x); } }); },
       },
       {
-        name: 'Overcharge', dmg: 0, cd: 16, mp: 6, kind: 'custom', life: 6,
-        desc: 'Supercharge yourself: you hit much harder and crackle with violet lightning.',
-        spawn(e, g, A) { const p = A.p; p.ab.buffs.rage = { t: e.life * (e.up ? 1.4 : 1), up: e.up, pal: e.pal }; A.g.floatText(p.cx, p.y - 10, 'OVERCHARGED!', e.pal.l); A.sfx('zap'); A.flash(0.1); },
-        update(e, dt, g, A) { const p = A.p; e.x = p.cx; e.y = p.y; if (!p.ab.buffs.rage) e.dead = true; },
-        draw(e, ctx, ox, oy, A) { if (Math.floor(e.t * 12) % 2) return; const x = e.x + ox, y = e.y + oy; ZAP(ctx, A, x - 8, y - 4, x + 8, y + 22, e.pal.c, Math.floor(e.t * 12)); ZAP(ctx, A, x + 8, y, x - 6, y + 20, '#ffd23a', Math.floor(e.t * 12) + 3); },
+        name: 'Overcharge', dmg: 14, cd: 16, mp: 6, kind: 'custom', life: 6,
+        desc: 'Supercharge yourself with a thunderclap: you hit much harder, and violet lightning lashes out at anything nearby.',
+        spawn(e, g, A) { const p = A.p; p.ab.buffs.rage = { t: e.life * (e.up ? 1.4 : 1), up: e.up, pal: e.pal }; A.g.floatText(p.cx, p.y - 10, 'OVERCHARGED!', e.pal.l); A.sfx('zap'); A.flash(0.12); W.boom(A, e, p.cx, p.y + 12, 44 * H.sc(e), { mult: 1.4 }); e.zt = 0.4; },
+        update(e, dt, g, A) {
+          const p = A.p; e.x = p.cx; e.y = p.y;
+          if (!p.ab.buffs.rage) { e.dead = true; return; }
+          e.zt -= dt; e.arc = Math.max(0, (e.arc || 0) - dt);
+          if (e.zt <= 0) { e.zt = 0.55; const t = A.near(p.cx, p.y + 10, 90); if (t) { const c = A.center(t); e.ax = c.x; e.ay = c.y; e.arc = 0.12; e.seed = Math.random() * 9; A.damage(e, t, 0.5, 0.3); if (t.applyStatus) t.applyStatus('shock', 0); } }
+        },
+        draw(e, ctx, ox, oy, A) { const x = e.x + ox, y = e.y + oy; if (e.arc > 0) W.bolt(ctx, A, x, y + 10, e.ax + ox, e.ay + oy, e.pal.c, e.seed, 1); if (Math.floor(e.t * 12) % 2) return; ZAP(ctx, A, x - 8, y - 4, x + 8, y + 22, e.pal.c, Math.floor(e.t * 12)); ZAP(ctx, A, x + 8, y, x - 6, y + 20, '#ffd23a', Math.floor(e.t * 12) + 3); },
       },
       {
         name: 'Storm Net', dmg: 10, cd: 8, mp: 7, kind: 'custom', life: 1.8,
@@ -607,28 +808,46 @@
       run(A, e0) {
         const p = A.p;
         A.spawn(e0, {
-          life: 3.4, layer: 'screen',
-          spawn(e) { e.ts = H.nearby(A, p.cx, p.y, 320).map((o) => o.t); e.bolts = []; e.bt = 0; A.sfx('rumble', { dur: 3 }); },
+          life: 3.8, layer: 'screen',
+          spawn(e) { e.ts = H.nearby(A, p.cx, p.y, 340).map((o) => o.t); e.bolts = []; e.bt = 0; e.sparks = []; A.sfx('rumble', { dur: 3.4 }); },
           update(e, dt, g, A) {
             e.bt -= dt; for (const b of e.bolts) b.t += dt;
+            for (const s of e.sparks) { s.t += dt; s.vy += 400 * dt; s.x += s.vx * dt; s.y += s.vy * dt; }
+            e.sparks = e.sparks.filter((s) => s.t < 0.6);
             const live = e.ts.filter((t) => !t.dead);
-            if (e.t < 2.5 && e.bt <= 0) {
-              e.bt = 0.05;
-              const t = live.length && Math.random() < 0.6 ? live[Math.floor(Math.random() * live.length)] : null;
-              const x = t ? A.center(t).x : p.cx + A.rnd(-220, 220), gy = A.ground(x, p.y - 40);
-              e.bolts.push({ x, gy, t: 0, s: Math.random() * 99 });
-              A.hitR(e, x, gy - 20, 16, { mult: 0.6, kb: 0.3, once: false, every: 0.15 });
+            // bolt after bolt after bolt
+            if (e.t < 2.6 && e.bt <= 0) {
+              e.bt = 0.06;
+              const t = live.length && Math.random() < 0.65 ? live[Math.floor(Math.random() * live.length)] : null;
+              const x = t ? A.center(t).x + A.rnd(-6, 6) : p.cx + A.rnd(-240, 240), gy = A.ground(x, p.y - 40);
+              e.bolts.push({ x, gy, t: 0, s: Math.random() * 99, w: Math.random() < 0.25 ? 4 : 2 });
+              A.hitR(e, x, gy - 20, 18, { mult: 0.6, kb: 0.3, once: false, every: 0.15 });
+              for (let i = 0; i < 6; i++) e.sparks.push({ x, y: gy - 2, vx: A.rnd(-120, 120), vy: A.rnd(-200, -60), t: 0 });
               A.sfx('zap', { minGap: 0.03 });
+              if (Math.random() < 0.3) A.flash(0.08);
             }
-            if (e.t > 2.6 && !e.fin) { e.fin = true; const c = live[0] ? A.center(live[0]) : { x: p.cx + e.dir * 80, y: p.y + 10 }; e.fx2 = c; A.blast(e, c.x, c.y, 110 * H.sc(e), { dmg: e.dmg * 6 }); A.sfx('boom'); A.flash(0.8); A.shake(14, 0.7); }
+            // ...and then the one that ends it
+            if (e.t > 2.75 && !e.fin) {
+              e.fin = e.t; const c = live[0] ? A.center(live[0]) : { x: p.cx + e.dir * 80, y: p.y + 10 }; e.fx2 = c; e.gy2 = A.ground(c.x, c.y - 10);
+              A.blast(e, c.x, c.y, 120 * H.sc(e), { dmg: e.dmg * 7 }); A.sfx('boom'); A.sfx('zap', { minGap: 0 }); A.flash(0.9); A.shake(16, 0.8);
+              for (let i = 0; i < 40; i++) e.sparks.push({ x: c.x, y: e.gy2 - 2, vx: A.rnd(-300, 300), vy: A.rnd(-360, -80), t: 0 });
+            }
           },
           draw(e, ctx, ox, oy, A) {
-            const dark = e.t < 2.8 ? Math.min(1, e.t * 3) * 0.6 : Math.max(0, 0.6 - (e.t - 2.8) * 1);
+            const dark = e.t < 3 ? Math.min(1, e.t * 3) * 0.65 : Math.max(0, 0.65 - (e.t - 3));
             A.alpha(ctx, dark, () => A.px(ctx, -10, -10, 2000, 2000, '#0e0618'));
             const top = A.top() + oy;
-            A.alpha(ctx, Math.min(1, dark * 1.6), () => { for (let i = 0; i < 14; i++) A.disc(ctx, p.cx + ox - 320 + i * 48, top + 12 + (i % 2) * 5, 22, '#1e1030', '#3a2a5a'); });
-            for (const b of e.bolts) if (b.t < 0.1) { ZAP(ctx, A, b.x + ox, top + 20, b.x + ox, b.gy + oy, e.pal.c, b.s); A.alpha(ctx, 0.6, () => A.ring(ctx, b.x + ox, b.gy + oy - 2, 6, '#ffffff', 2)); }
-            if (e.fin && e.t < 3.1) { const w = 26 * (1 - (e.t - 2.6) / 0.5), c = e.fx2; A.px(ctx, c.x + ox - w / 2, top, w, c.y + oy - top, '#ffffff'); A.px(ctx, c.x + ox - w, top, 2, c.y + oy - top, e.pal.c); A.px(ctx, c.x + ox + w, top, 2, c.y + oy - top, e.pal.c); }
+            // the storm overhead
+            A.alpha(ctx, Math.min(1, dark * 1.6), () => { for (let i = 0; i < 18; i++) A.disc(ctx, p.cx + ox - 400 + i * 48, top + 14 + (i % 2) * 6, 26, '#1e1030', '#3a2a5a'); });
+            for (const b of e.bolts) if (b.t < 0.12) { W.bolt(ctx, A, b.x + ox, top + 24, b.x + ox, b.gy + oy, e.pal.c, b.s, b.w); A.alpha(ctx, 0.7, () => A.ring(ctx, b.x + ox, b.gy + oy - 2, 8 + b.t * 60, '#ffffff', 3)); }
+            for (const s of e.sparks) A.px(ctx, s.x + ox, s.y + oy, 1, 1, s.t < 0.2 ? '#ffffff' : e.pal.l);
+            if (e.fin && e.t < e.fin + 0.6) {
+              const k = (e.t - e.fin) / 0.6, c = e.fx2, w = 34 * (1 - k) + 4, gy = e.gy2 + oy, x = c.x + ox;
+              A.alpha(ctx, 0.4, () => A.px(ctx, x - w * 1.6, top, w * 3.2, gy - top, e.pal.c));
+              W.bolt(ctx, A, x, top, x, gy, e.pal.c, e.t * 40, w);
+              A.px(ctx, x - w / 3, top, w * 0.66, gy - top, '#ffffff');
+              A.alpha(ctx, 1 - k, () => { A.ring(ctx, x, gy - 2, 10 + k * 160, '#ffffff', (10 + k * 160) * 0.3, 2); A.ring(ctx, x, gy - 2, 6 + k * 120, e.pal.c, (6 + k * 120) * 0.3, 2); });
+            }
           },
         }, {});
       },
@@ -637,9 +856,22 @@
 
   // ================================================================ ICE (frost)
   const SHARDS = (A, e, x, y, n, sp) => { for (let i = 0; i < n; i++) A.spawn(e, { life: 0.7, update(s, dt) { s.vy += 380 * dt; s.x += s.vx * dt; s.y += s.vy * dt; }, draw(s, ctx, ox, oy, A) { A.alpha(ctx, 1 - s.t / s.life, () => { A.line(ctx, s.x + ox, s.y + oy, s.x + ox + s.vx * 0.015, s.y + oy + s.vy * 0.015, '#e8f8ff'); A.px(ctx, s.x + ox, s.y + oy, 1, 1, '#ffffff'); }); } }, { x, y, vx: A.rnd(-1, 1) * (sp || 120), vy: A.rnd(-200, 20) }); };
+  /** Ice spikes bursting up at every point in `pts` ([x, groundY] pairs), hitting everything along them. */
+  const ICE_ROW = {
+    life: 0.75,
+    update(s, dt, g, A) {
+      if (s.t >= 0.25 || !s.pts.length) return;
+      const xs = s.pts.map((q) => q[0]), x0 = Math.min(...xs) - 6, x1 = Math.max(...xs) + 6, gy = s.pts[0][1];
+      A.hit(s, { x: x0, y: gy - 28, w: x1 - x0, h: 28 }, { kb: 0.4, onHit(t) { if (t.applyStatus) { t.applyStatus('chill', 0); t.applyStatus('launch', 0); } } });
+    },
+    draw(s, ctx, ox, oy, A) {
+      const k = Math.min(1, s.t / 0.1), f = 1 - Math.max(0, s.t - 0.45) / 0.3;
+      A.alpha(ctx, f, () => s.pts.forEach(([x, gy], i) => { const h = (14 + (i * 7) % 10) * k * H.sc(s); A.tri(ctx, x + ox, gy + oy, 7, h, '#a8e0ff', '#ffffff'); A.px(ctx, x + ox - 1, gy + oy - h * 0.8, 1, h * 0.6, '#ffffff'); }));
+    },
+  };
   AW.ice = {
     color: '#c8f0ff', up: '#7ab8ff', status: 'chill', fx: 'snow', block: ['Frozen Fortress', 'wall'],
-    icons: ['fang', 'glacier', 'domain', 'wolf', 'snowball'],
+    icons: ['glacier', 'domain', 'wolf', 'skater', 'snowball'],
     look: {
       fx(ctx, F) {
         // ice crystals on your cheek
@@ -675,10 +907,19 @@
     },
     m1: {
       name: 'Frost Fang', dmg: 9, cd: 0.36, kind: 'custom', life: 0.6,
-      desc: 'Slash with an ice dagger. The slash freezes in the air for a moment, then shatters and hits again.',
+      desc: 'Slash with an ice dagger. The slash freezes in the air for a moment, then shatters and hits everything around it again.',
       spawn(e, g, A) { H.at(e, A, 0); e.sx = e.x; e.sy = e.y; A.sfx('swing', { minGap: 0.04 }); },
-      update(e, dt, g, A) { const R = 32 * H.sc(e), box = { x: e.dir > 0 ? e.sx : e.sx - R, y: e.sy - 12, w: R, h: 24 }; if (e.t < 0.12) A.hit(e, box, { kb: 0.4 }); if (e.t > 0.4 && !e.sh) { e.sh = true; e.hit.clear(); A.hit(e, box, { mult: 0.6, kb: 0.6, onHit(t) { if (t.applyStatus) t.applyStatus('chill', 0); } }); SHARDS(A, e, e.sx + e.dir * 14, e.sy, 6, 90); A.sfx('glassCrack', { minGap: 0.04 }); } },
-      draw(e, ctx, ox, oy, A) { if (e.sh) return; const R = 26 * H.sc(e), x = e.sx + ox, y = e.sy + oy, k = Math.min(1, e.t / 0.12); A.arc(ctx, x, y, R * 0.7, e.dir, '#ffffff', 2, -1.1, U.lerp(-1.1, 1.1, k)); A.arc(ctx, x, y, R * 0.7 - 2, e.dir, e.pal.c, 2, -1.1, U.lerp(-1.1, 1.1, k)); },
+      update(e, dt, g, A) { const R = 32 * H.sc(e), box = { x: e.dir > 0 ? e.sx : e.sx - R, y: e.sy - 14, w: R, h: 28 }; if (e.t < 0.12) A.hit(e, box, { kb: 0.4 }); if (e.t > 0.4 && !e.sh) { e.sh = true; e.hit.clear(); A.hit(e, box, { mult: 0.7, kb: 0.8, onHit(t) { if (t.applyStatus) t.applyStatus('chill', 0); } }); SHARDS(A, e, e.sx + e.dir * 16, e.sy, 10, 110); A.spawn(e, W.SHOCK, { x: e.sx + e.dir * 16, y: e.sy, r: 20 * H.sc(e), dmg: 0, life: 0.3 }); A.sfx('glassCrack', { minGap: 0.04 }); } },
+      draw(e, ctx, ox, oy, A) {
+        if (e.sh) return;
+        const R = 26 * H.sc(e), x = e.sx + ox, y = e.sy + oy, d = e.dir;
+        if (e.t < 0.12) { W.smear(ctx, A, x, y, R, d, (e.t / 0.12) * 0.6, e.pal.c, 6, -1.2, 1.2); return; }
+        // the slash hangs frozen in the air, cracking
+        const f = (e.t - 0.12) / 0.28;
+        A.arc(ctx, x, y, R, d, '#c8f0ff', 6, -1.2, 1.2); A.arc(ctx, x, y, R, d, '#ffffff', 2, -1.2, 1.2);
+        for (let i = 0; i < 5; i++) { const a = -1 + i * 0.5, cx = x + Math.cos(a) * (R - 2) * d, cy = y + Math.sin(a) * (R - 2); if (f > i * 0.18) A.line(ctx, cx, cy, cx - d * 3, cy + (i % 2 ? 3 : -3), '#5ab0ff'); }
+        if (Math.floor(e.t * 30) % 3 === 0) A.star(ctx, x + Math.cos(-0.5) * R * d, y - R * 0.45, 2, '#ffffff');
+      },
     },
     s: [
       {
@@ -697,17 +938,48 @@
       },
       {
         name: 'Frost Wolf', dmg: 18, cd: 9, mp: 7, kind: 'custom', life: 3,
-        desc: 'Summon a wolf of living ice that sprints at the nearest enemy and bites, freezing as it goes.',
+        desc: 'Summon a great wolf of living ice that sprints at the nearest enemy, bites, freezes as it goes... and shatters in a frozen blast.',
         spawn(e, g, A) { const p = A.p; e.x = p.cx; e.gy = p.feet; e.d = p.facing; e.bites = 0; A.sfx('glassCrack'); },
-        update(e, dt, g, A) { const t = A.near(e.x, e.gy - 8, 220); e.bt = Math.max(0, (e.bt || 0) - dt); if (t) { const c = A.center(t), dx = c.x - e.x; e.d = Math.sign(dx) || e.d; if (Math.abs(dx) > 10) { const nx = e.x + e.d * 210 * dt; if (!A.solid(nx + e.d * 6, e.gy - 6)) { e.x = nx; e.gy = A.ground(e.x, e.gy - 14); } e.run = (e.run || 0) + dt; } else if (e.bt <= 0 && e.bites < (e.up ? 4 : 3)) { e.bt = 0.45; e.bites++; e.snap = 0.15; A.damage(e, t, 1, 0.5); if (t.applyStatus) t.applyStatus('chill', e.potency); A.sfx('punchHit', { minGap: 0.05 }); } } if (e.bites >= (e.up ? 4 : 3) && !e.gone) { e.gone = true; e.t = Math.max(e.t, e.life - 0.3); SHARDS(A, e, e.x, e.gy - 6, 10); } e.snap = Math.max(0, (e.snap || 0) - dt); },
-        draw(e, ctx, ox, oy, A) { const x = e.x + ox, gy = e.gy + oy, d = e.d, leg = Math.floor((e.run || 0) * 14) % 2; A.alpha(ctx, A.fade(e, 0.15, 0.3) * 0.9, () => { A.px(ctx, x - 7, gy - 9, 13, 5, '#a8e0ff'); A.px(ctx, x - 7, gy - 9, 13, 1, '#ffffff'); A.px(ctx, x + d * 5, gy - 12, 5, 5, '#c8f0ff'); A.px(ctx, x + d * 9, gy - 10, 3, 2 + (e.snap ? 1 : 0), '#c8f0ff'); A.px(ctx, x + d * 7, gy - 11, 1, 1, '#1a5aff'); A.tri(ctx, x + d * 6, gy - 12, 3, 3, '#ffffff'); A.line(ctx, x - d * 7, gy - 8, x - d * 11, gy - 11, '#e8f8ff'); for (const lx of [-5, -2, 2, 5]) A.px(ctx, x + lx, gy - 4, 1, 4 - ((lx > 0 ? leg : 1 - leg)), '#a8e0ff'); }); },
+        update(e, dt, g, A) {
+          const t = A.near(e.x, e.gy - 8, 220), max = e.up ? 4 : 3;
+          e.bt = Math.max(0, (e.bt || 0) - dt);
+          if (t && !e.gone) {
+            const c = A.center(t), dx = c.x - e.x;
+            e.d = Math.sign(dx) || e.d;
+            if (Math.abs(dx) > 12) { const nx = e.x + e.d * 230 * dt; if (!A.solid(nx + e.d * 8, e.gy - 6)) { e.x = nx; e.gy = A.ground(e.x, e.gy - 14); } e.run = (e.run || 0) + dt; if (Math.random() < dt * 18) SHARDS(A, e, e.x - e.d * 8, e.gy - 2, 1, 30); }
+            else if (e.bt <= 0 && e.bites < max) { e.bt = 0.42; e.bites++; e.snap = 0.15; A.damage(e, t, 1, 0.5); if (t.applyStatus) t.applyStatus('chill', e.potency); A.sfx('punchHit', { minGap: 0.05 }); A.spawn(e, W.SHOCK, { x: c.x, y: c.y, r: 14 * H.sc(e), dmg: 0, life: 0.25 }); SHARDS(A, e, c.x, c.y, 5); }
+          }
+          if (e.bites >= max && !e.gone) { e.gone = true; e.t = Math.max(e.t, e.life - 0.3); SHARDS(A, e, e.x, e.gy - 6, 14); W.boom(A, e, e.x + e.d * 10, e.gy - 10, 30 * H.sc(e), { mult: 1.2 }); }
+          e.snap = Math.max(0, (e.snap || 0) - dt);
+        },
+        draw(e, ctx, ox, oy, A) {
+          const x = e.x + ox, gy = e.gy + oy, d = e.d, s = 1.7, leg = Math.floor((e.run || 0) * 14) % 2;
+          const P = (dx, dy, w, h, c) => A.px(ctx, d > 0 ? x + dx * s : x - (dx + w) * s, gy + dy * s, w * s, h * s, c);
+          A.alpha(ctx, A.fade(e, 0.15, 0.3) * 0.95, () => {
+            A.alpha(ctx, 0.3, () => A.disc(ctx, x, gy - 7 * s, Math.round(9 * s), e.pal.c));
+            P(-7, -9, 13, 5, '#a8e0ff'); P(-7, -9, 13, 1, '#ffffff'); P(-6, -5, 11, 1, '#5ab0ff');
+            P(5, -12, 5, 5, '#c8f0ff'); P(9, -10, 3, 2 + (e.snap ? 1 : 0), '#c8f0ff'); P(7, -11, 1, 1, '#1a5aff');
+            P(5, -14, 2, 2, '#ffffff'); P(8, -14, 1, 2, '#ffffff');
+            P(-11, -11, 4, 1, '#e8f8ff'); P(-13, -12, 2, 1, '#ffffff');
+            for (const lx of [-5, -2, 2, 5]) P(lx, -4, 1, 4 - (lx > 0 ? leg : 1 - leg), '#a8e0ff');
+            if (e.snap) for (let i = 0; i < 3; i++) P(12 + i, -12 + i * 2, 1, 1, '#ffffff');
+          });
+        },
       },
       {
-        name: 'Ice Skater Slash', dmg: 16, cd: 6, mp: 5, kind: 'custom', life: 0.55,
-        desc: 'Skate forward at high speed on a ribbon of fresh ice, slashing everything you pass.',
+        name: 'Ice Skater Slash', dmg: 16, cd: 6, mp: 5, kind: 'custom', life: 0.8,
+        desc: 'Skate forward at high speed on a ribbon of fresh ice, slashing everything you pass... then the ribbon erupts into ice spikes.',
         spawn(e, g, A) { const p = A.p; e.dir = p.facing; p.vx = e.dir * 300; p.lungeT = 0.4; p.dashGrace = 0.45; e.trail = []; A.sfx('swing'); },
-        update(e, dt, g, A) { const p = A.p; e.trail.push({ x: p.cx, gy: p.feet, t: e.t }); A.hit(e, { x: p.x - 6, y: p.y, w: p.w + 12, h: p.h }, { kb: 1, dir: e.dir, onHit(t) { if (t.applyStatus) t.applyStatus('chill', 0); } }); },
-        draw(e, ctx, ox, oy, A) { for (const s of e.trail) { const a = 1 - (e.t - s.t) / 0.5; if (a > 0) A.alpha(ctx, a, () => { A.px(ctx, s.x + ox - 3, s.gy + oy - 1, 6, 1, '#c8f0ff'); A.px(ctx, s.x + ox, s.gy + oy - 6 - (s.x % 7), 1, 1, '#ffffff'); }); } const p = A.p; if (e.t < 0.4) A.arc(ctx, p.cx + ox + e.dir * 6, p.y + oy + 10, 12, e.dir, '#ffffff', 1, -1, 1); },
+        update(e, dt, g, A) {
+          const p = A.p;
+          if (e.t < 0.42) { e.trail.push({ x: p.cx, gy: p.feet, t: e.t }); A.hit(e, { x: p.x - 6, y: p.y, w: p.w + 12, h: p.h }, { kb: 1, dir: e.dir, onHit(t) { if (t.applyStatus) t.applyStatus('chill', 0); } }); }
+          else if (!e.spk) { e.spk = true; A.spawn(e, ICE_ROW, { pts: e.trail.filter((s, i) => i % 3 === 0).map((s) => [s.x, s.gy]) }); A.sfx('glassCrack'); A.shake(3, 0.2); }
+        },
+        draw(e, ctx, ox, oy, A) {
+          for (const s of e.trail) { const a = 1 - (e.t - s.t) / 0.5; if (a > 0) A.alpha(ctx, a, () => { A.px(ctx, s.x + ox - 3, s.gy + oy - 1, 6, 1, '#c8f0ff'); A.px(ctx, s.x + ox, s.gy + oy - 6 - (s.x % 7), 1, 1, '#ffffff'); }); }
+          const p = A.p;
+          if (e.t < 0.42) W.smear(ctx, A, p.cx + ox + e.dir * 2, p.y + oy + 11, 16, e.dir, (e.t % 0.14) / 0.14, e.pal.c, 4, -1.4, 1.4);
+        },
       },
       {
         name: 'Snowball Avalanche', dmg: 12, cd: 8, mp: 6, kind: 'custom', life: 2.4,

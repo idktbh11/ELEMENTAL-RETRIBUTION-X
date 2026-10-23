@@ -80,7 +80,7 @@
     loadLevel(id, opts = {}) {
       const seed = (Date.now() >>> 0) ^ (id === 'cave' ? 0x1234 : 0x5678);
       this.levelId = id;
-      const Level = { cave: ERX.CaveLevel, vault: ERX.VaultLevel, void: ERX.VoidLevel, hq: ERX.HqLevel, training: ERX.TrainingLevel }[id] || ERX.DeepEndsLevel;
+      const Level = { cave: ERX.CaveLevel, vault: ERX.VaultLevel, void: ERX.VoidLevel, hq: ERX.HqLevel, training: ERX.TrainingLevel, world1: ERX.World1Level }[id] || ERX.DeepEndsLevel;
       this.level = new Level(seed);
       this.backWall = this.level.renderBackWall ? this.level.renderBackWall() : null;
       this.frontLayer = this.level.renderFront ? this.level.renderFront() : null;
@@ -118,6 +118,12 @@
       this.hqDoor = null;
       this.launch = null;
       this.float = null;
+      this.fall = null;
+      this.pull = null;
+      this.recall = null;
+      this.gift = null;
+      this.checkshot = null;
+      this.blocker = null;
       this.ripples = [];
       this.effects = [];
       this.cine = null;
@@ -231,6 +237,28 @@
         ERX.Audio.playMusic('onward');
         ERX.Audio.setAmbience(null);
         this.banner = { title: 'TRAINING ROOM', sub: 'Hit stuff. Learn stuff. The dummies signed waivers.', t: 0, dur: 3.5 };
+      } else if (id === 'world1') {
+        // WORLD 1: you always arrive from the sky; coming back from a save puts you at the Checkshot
+        const L = this.level;
+        L.game = this;
+        L.ambience = 'world1';
+        this.stageName = 'world1';
+        this.darkness = 0;
+        this.hudAlpha = 1;
+        this.allowDeath = true;
+        if (this.worldTod === undefined) this.worldTod = 0.12;   // a fresh morning
+        this.checkshot = { x: L.checkshotX, y: L.floorY, on: false, t: 0, onT: 0 };
+        if (opts.fall) {
+          p.placeAt(L.landX, L.floorY - L.fallHeight);
+          this.fall = new ERX.SkyFall(this, 1);
+          this.fall.onDone = (g) => g.runScript(ERX.Story.world.world1Arrival);
+        } else {
+          p.placeAt(L.checkshotX + 20, L.floorY);
+          this.checkshot.on = true;
+          this.blocker = { x: L.slimeX, y: L.floorY, vy: 0, landed: true, t: 1, angry: false };
+          ERX.Audio.playMusic('world1');
+          ERX.Audio.setAmbience('world1');
+        }
       } else {
         const L = this.level;
         const at = opts.at === 'hall' ? L.checkpoints[L.checkpoints.length - 1] : opts.at === 'elevator' ? { x: L.elevator.x0 - 24, y: L.elevator.floorY } : L.spawn;
@@ -423,8 +451,7 @@
       c.elementSkills = {};
       c.skillPoints = 0;
       c.gold = 0;
-      c.armor = null;
-      c.armorOwned = [];
+      ERX.Inventory.clearArmor(c);
       p.hp = 0; p.mp = 0;
       p.applySkills();
       p.hp = p.maxHp; p.mp = p.maxMp;
@@ -524,6 +551,186 @@
       this.rev = { t: 0, you: null, got: null, roll: null, elem: null, rarity: null, slime: { y: -140, vy: 0, landed: false, t: 0 }, sparks: [] };
     }
 
+    // ------------------------------------------------------- the worlds
+    /** Drop into a world: 2 s of black, the portal, the fall (js/game/world-fall.js). */
+    enterWorld(n) {
+      this.flashT = 0;
+      this.loadLevel('world' + n, { fall: true });
+    }
+    /** Remember a story moment on the character (progress.vrd, progress.world1...). */
+    saveFlag(name) {
+      this.character.progress = Object.assign({}, this.character.progress, { [name]: true });
+      ERX.Saves.update(this.character);
+    }
+    /** Freeze the launch where it is (someone is yelling WAIT). */
+    holdLaunch() { if (this.launch) this.launch.hold = true; }
+    /** Where the launch has you right now, in world pixels (feet), and how small you've got. */
+    _launchPos() {
+      const L = this.launch, cam = this.camera, target = this._skyPos(this.worlds.list[0]);
+      const sx = L.x0 - cam.ix, sy = L.y0 - cam.iy, hop = Math.min(1, L.t / 0.35), e = U.clamp((L.t - 0.35) / 1.4, 0, 1), ee = e * e;
+      return { x: U.lerp(sx, target.x, ee) + cam.ix, y: U.lerp(sy - Math.sin(hop * Math.PI * 0.5) * 30, target.y, ee) + cam.iy };
+    }
+    /** The Voice comes running out of the HQ (making the figure if he wasn't around). */
+    figureBurstsOut() {
+      const L = this.level;
+      const f = this.figure || (this.figure = { x: 0, y: L.floorY, facing: -1, front: false, expr: 'shock', pose: 'idle', t: 0, hop: 0, shakeT: 0, bubble: null, walkTo: null, gone: false, met: true, named: true });
+      Object.assign(f, { gone: false, x: this.hqDoor ? this.hqDoor.x : L.doorX, y: L.floorY, walkTo: null, facing: -1, expr: 'shock', pose: 'point', hop: 1, shakeT: 0.6, front: false, met: true, named: true });
+      if (this.hqDoor) this.hqDoor.openT = 0.9;
+      sfx('doorOpen');
+      return f;
+    }
+    /** The telekinesis device: you get dragged out of the air and back down to (toX, the floor). */
+    startPull(toX) {
+      const from = this.launch ? this._launchPos() : { x: this.player.cx, y: this.player.feet };
+      this.launch = null;
+      this.state = 'pull';
+      this.pull = { t: 0, x0: from.x, y0: from.y, x1: toX, y1: this.level.floorY };
+    }
+    _updatePull(dt) {
+      const P = this.pull, p = this.player;
+      P.t += dt;
+      const k = Math.min(1, P.t / 1.3), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      p.placeAt(U.lerp(P.x0, P.x1, e), U.lerp(P.y0, P.y1, e) - Math.sin(k * Math.PI) * 26);
+      if (k >= 1) {
+        this.pull = null;
+        this.state = 'play';
+        p.placeAt(P.x1, P.y1);
+        sfx('thud');
+        this.dust(P.x1, P.y1, 10);
+        this.shake(3, 0.25);
+        if (this.ripple) this.ripple(P.x1, P.y1, true);
+      }
+    }
+    _renderPull(c, cam) {
+      const P = this.pull, p = this.player, f = this.figure, t = this.t;
+      if (f) {
+        const h = ERX.FigureSprite.hand(f.facing), hx = f.x + h.x - cam.ix, hy = f.y + h.y - cam.iy, px2 = p.cx - cam.ix, py = p.y + 10 - cam.iy;
+        // the device in his hand
+        c.fillStyle = '#120c1c'; c.fillRect(Math.round(hx) - 3, Math.round(hy) - 3, 7, 6);
+        c.fillStyle = '#3a3a4a'; c.fillRect(Math.round(hx) - 2, Math.round(hy) - 2, 5, 4);
+        c.fillStyle = Math.floor(t * 12) % 2 ? '#ff8ad8' : '#c89aff'; c.fillRect(Math.round(hx), Math.round(hy) - 1, 2, 2);
+        // the beam: three wobbling strands and sparks
+        for (let s = 0; s < 3; s++) {
+          c.fillStyle = s === 1 ? '#ffffff' : s ? '#ff8ad8' : '#c89aff';
+          for (let i = 0; i <= 30; i++) { const q = i / 30, w = Math.sin(q * 12 - t * 18 + s * 2) * 3 * Math.sin(q * Math.PI); c.fillRect(Math.round(U.lerp(hx, px2, q)), Math.round(U.lerp(hy, py, q) + w), 1, 1); }
+        }
+        c.globalAlpha = 0.25; c.fillStyle = '#c89aff'; c.fillRect(Math.round(px2) - 9, Math.round(py) - 14, 18, 26); c.globalAlpha = 1;
+      }
+      const cv = ERX.PlayerSide.frame(p.look, 'hurt', 0, p.facing);
+      c.save();
+      c.translate(Math.round(p.cx - cam.ix), Math.round(p.feet - 12 - cam.iy));
+      c.rotate(Math.sin(t * 9) * 0.25 * (1 - Math.min(1, P.t / 1.3)));
+      ERX.PlayerSide.draw(c, cv, 0, 12, p.facing);
+      c.restore();
+    }
+    /** An item floats from the Voice's hand over your head, then into your pocket. */
+    giveItem(id) {
+      const ch = this.character, f = this.figure;
+      ERX.Inventory.add(ch, id);
+      ERX.Saves.update(ch);
+      const h = f ? ERX.FigureSprite.hand(f.facing) : { x: 0, y: -24 };
+      this.gift = { id, t: 0, from: f ? { x: f.x + h.x, y: f.y + h.y } : { x: this.player.cx, y: this.player.y - 24 } };
+      const it = ERX.Items.get(id);
+      this.banner = { title: 'YOU GOT THE ' + it.name + '!', sub: it.desc, t: 0, dur: 3.4 };
+      sfx('itemGet');
+    }
+    _renderGift(c, cam) {
+      const gf = this.gift, p = this.player, it = ERX.Items.get(gf.id);
+      const to = { x: p.cx, y: p.y - 16 };
+      let x, y, s = 1;
+      if (gf.t < 0.7) { const k = gf.t / 0.7; x = U.lerp(gf.from.x, to.x, k); y = U.lerp(gf.from.y, to.y, k) - Math.sin(k * Math.PI) * 24; }
+      else if (gf.t < 2.1) { x = to.x; y = to.y + Math.sin(gf.t * 4) * 2; }
+      else if (gf.t < 2.4) { const k = (gf.t - 2.1) / 0.3; x = to.x; y = U.lerp(to.y, p.y + 10, k); s = 1 - k; }
+      else { this.gift = null; return; }
+      const sx = x - cam.ix, sy = y - cam.iy;
+      const big = gf.t < 0.7 ? 1 + gf.t / 0.7 : 2;
+      if (gf.t > 0.5) { const g2 = c.createRadialGradient(sx, sy, 1, sx, sy, 18); g2.addColorStop(0, 'rgba(224,200,255,0.55)'); g2.addColorStop(1, 'rgba(224,200,255,0)'); c.fillStyle = g2; c.fillRect(sx - 18, sy - 18, 36, 36); }
+      if (gf.t > 0.7 && gf.t < 2.1) { c.fillStyle = '#ffffff'; for (let i = 0; i < 8; i++) { const a = gf.t * 3 + i * 0.785; c.fillRect(Math.round(sx + Math.cos(a) * 14), Math.round(sy + Math.sin(a) * 14), 1, 1); } }
+      if (s > 0.05) it.draw(c, sx, sy, gf.t, s * big);
+    }
+
+    /** The grumpy slime falls out of the sky at x and parks itself in your way. */
+    dropBlocker(x) {
+      this.blocker = { x, y: this.camera.y - 40, vy: 0, landed: false, t: 0, angry: false };
+    }
+    _updateBlocker(dt) {
+      const b = this.blocker, p = this.player;
+      if (!b) return;
+      b.t += dt;
+      if (!b.landed) {
+        b.vy += 900 * dt; b.y += b.vy * dt;
+        if (b.y >= this.level.floorY) { b.y = this.level.floorY; b.landed = true; b.t = 0; this.dust(b.x, b.y, 14); }
+        return;
+      }
+      if (p.x + p.w > b.x - 12) { p.x = b.x - 12 - p.w; if (p.vx > 0) p.vx = 0; }   // nobody gets past. nobody.
+    }
+    _renderBlocker(c, cam) {
+      const b = this.blocker;
+      if (!ERX.Slime) return;
+      const frame = !b.landed ? 2 : b.t < 0.3 ? 1 : Math.floor(b.t * 1.5) % 2;
+      const sl = ERX.Slime(b.angry ? '#e0504a' : '#8a90b0', frame), x = Math.round(b.x - cam.ix), y = Math.round(b.y - cam.iy);
+      c.drawImage(sl, x - Math.round(sl.width / 2), y - sl.height + 2);
+      // a hard hat. it's a construction site.
+      const top = y - sl.height + 4;
+      c.fillStyle = '#120c1c'; c.fillRect(x - 6, top - 4, 12, 4);
+      c.fillStyle = '#ffd34d'; c.fillRect(x - 5, top - 4, 10, 3); c.fillRect(x - 7, top - 1, 14, 1);
+      c.fillStyle = '#fff0a0'; c.fillRect(x - 3, top - 4, 3, 1);
+    }
+
+    /** The Checkshot: a stone pedestal with a void crystal floating over it (glowing once it's on). */
+    _renderCheckshot(c, cam) {
+      const cs = this.checkshot, x = Math.round(cs.x - cam.ix), y = Math.round(cs.y - cam.iy), t = this.t;
+      if (x < -40 || x > this.view.width + 40) return;
+      const R = (xx, yy, w, h, col) => { c.fillStyle = col; c.fillRect(Math.round(xx), Math.round(yy), w, h); };
+      if (cs.on) {
+        const g2 = c.createRadialGradient(x, y - 26, 2, x, y - 26, 40);
+        g2.addColorStop(0, 'rgba(200,154,255,0.45)'); g2.addColorStop(1, 'rgba(200,154,255,0)');
+        c.fillStyle = g2; c.fillRect(x - 40, y - 66, 80, 80);
+        c.globalAlpha = 0.18 + 0.06 * Math.sin(t * 3); R(x - 3, y - 120, 6, 100, '#e0c8ff'); R(x - 1, y - 140, 2, 120, '#ffffff'); c.globalAlpha = 1;
+      }
+      R(x - 8, y - 6, 16, 6, '#120c1c'); R(x - 7, y - 6, 14, 5, '#7e7884'); R(x - 7, y - 6, 14, 1, '#a8a0a8');
+      R(x - 5, y - 13, 10, 7, '#120c1c'); R(x - 4, y - 13, 8, 7, '#6a6474'); R(x - 4, y - 13, 8, 1, '#8e8894');
+      R(x - 2, y - 11, 1, 3, cs.on ? '#e0c8ff' : '#4a4458'); R(x + 1, y - 11, 1, 3, cs.on ? '#e0c8ff' : '#4a4458');
+      // the crystal, turning slowly as it floats
+      const fy = y - 28 + Math.sin(t * 2) * 2, w = Math.max(1, Math.round(Math.abs(Math.cos(t * 1.4)) * 4) + 1);
+      for (let yy = -7; yy <= 7; yy++) {
+        const hw = Math.round(w * (1 - Math.abs(yy) / 8));
+        for (let xx = -hw; xx <= hw; xx++) R(x + xx, fy + yy, 1, 1, cs.on ? (xx < 0 ? '#e0c8ff' : xx === 0 ? '#ffffff' : '#b87aff') : (xx < 0 ? '#6a5a8a' : '#4a3e66'));
+      }
+      if (cs.on) for (let i = 0; i < 5; i++) { const a = t * 2.4 + i * 1.257; R(x + Math.cos(a) * 10, fy + Math.sin(a) * 4, 1, 1, i % 2 ? '#ffffff' : '#c89aff'); }
+      if (cs.onT > 0 && cs.onT < 0.8) { c.globalAlpha = 1 - cs.onT / 0.8; c.strokeStyle = '#e0c8ff'; c.lineWidth = 1; c.beginPath(); c.ellipse(x + 0.5, fy + 0.5, 6 + cs.onT * 60, 3 + cs.onT * 30, 0, 0, Math.PI * 2); c.stroke(); c.globalAlpha = 1; }
+    }
+    activateCheckshot() {
+      const cs = this.checkshot;
+      cs.on = true; cs.onT = 0.001;
+      sfx('checkshotOn');
+      this.flashT = Math.max(this.flashT || 0, 0.15);
+      this.checkpoint = { x: cs.x, y: cs.y };
+      this.floats.push({ x: cs.x, y: cs.y - 44, text: 'CHECKSHOT REACHED', color: '#e0c8ff', t: 0, dur: 2.4, rise: 8 });
+      for (let i = 0; i < 30; i++) { const a = Math.random() * Math.PI * 2, sp = U.lerp(30, 110, Math.random()); this.fx.add({ x: cs.x, y: cs.y - 28, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: U.lerp(0.5, 1, Math.random()), color: Math.random() < 0.6 ? '#c89aff' : '#ffffff', size: 1, fadeOut: 0.4 }); }
+      this.saveFlag('checkshot1');
+    }
+    /** The VRD: you dissolve into the void's colours, and you're home. */
+    startRecall() {
+      this.state = 'recall';
+      this.recall = { t: 0 };
+      this.player.controls = false;
+      sfx('recallOut');
+    }
+    _updateRecall(dt) {
+      const r = this.recall, p = this.player;
+      r.t += dt;
+      if (Math.random() < dt * 40) { const a = Math.random() * Math.PI * 2, d = U.lerp(20, 40, Math.random()); this.fx.add({ x: p.cx + Math.cos(a) * d, y: p.y + 10 + Math.sin(a) * d, vx: -Math.cos(a) * d * 2, vy: -Math.sin(a) * d * 2, life: 0.5, color: Math.random() < 0.5 ? '#c89aff' : '#ffffff', size: 1, fadeOut: 0.2 }); }
+      if (r.t > 1.15 && !r.done) { r.done = true; this.flashT = 0.6; this.travel('void', { at: 'jump' }); }
+    }
+    _renderRecall(c, cam) {
+      const r = this.recall, p = this.player, k = Math.min(1, r.t / 1.15);
+      if (k < 0.92) this.player.render(c, cam);
+      const x = Math.round(p.cx - cam.ix), y = Math.round(p.y - cam.iy);
+      c.globalAlpha = 0.25 + k * 0.6; c.fillStyle = '#c89aff'; c.fillRect(x - Math.round(6 + k * 3), y - 4 - Math.round(k * 40), Math.round(12 + k * 6), Math.round(p.h + 6 + k * 40));
+      c.globalAlpha = k; c.fillStyle = '#ffffff'; c.fillRect(x - 1, y - 6 - Math.round(k * 60), 2, Math.round(p.h + 10 + k * 60)); c.globalAlpha = 1;
+    }
+
     /** Where a world hangs on screen (view coords). World 1 sits above the jump point; they drift a bit slower than the ground (depth). */
     _skyPos(w) {
       const cam = this.camera, vw = this.view.width, vh = this.view.height, L = this.level;
@@ -548,11 +755,15 @@
           const dir = Math.sign(f.walkTo - f.x);
           if (dir) f.facing = dir;
           f.pose = 'walk';
-          f.x += dir * 60 * dt;
+          const sp = f.walkSpeed || 60;
+          f.x = Math.abs(f.walkTo - f.x) <= sp * dt ? f.walkTo : f.x + dir * sp * dt;
           if (Math.abs(f.walkTo - f.x) < 2) {
-            f.gone = true;
-            sfx('doorOpen');
-            if (this.hqDoor) this.hqDoor.openT = 0.9;
+            if (f.walkStay) { f.walkTo = null; f.pose = 'idle'; }
+            else {
+              f.gone = true;
+              sfx('doorOpen');
+              if (this.hqDoor) this.hqDoor.openT = 0.9;
+            }
           }
         }
       }
@@ -592,7 +803,7 @@
           }
         }
       }
-      if (this.launch) this.launch.t += dt;
+      if (this.launch && !this.launch.hold) this.launch.t += dt;
       // the invisible floor ripples where you step
       for (const r of this.ripples) r.t += dt;
       this.ripples = this.ripples.filter((r) => r.t < 0.7);
@@ -659,6 +870,9 @@
       }
     }
 
+    /** An impact frame: a blink of inverted black-and-white, and a short freeze. */
+    impact(d) { this.impactT = Math.max(this.impactT || 0, d); this.hitStop = Math.max(this.hitStop || 0, d); }
+
     update(dt, input, active) {
       if (!active) return;
       this.t += dt;
@@ -678,6 +892,9 @@
         this.flashT = Math.max(0, (this.flashT || 0) - dt);
         return;
       }
+      // a freeze-frame after a heavy hit (awakened moves)
+      this.impactT = Math.max(0, (this.impactT || 0) - dt);
+      if (this.hitStop > 0) { this.hitStop -= dt; return; }
       if (this.state === 'play' && this.player.controls) {
         if (K.wasPressed('skills')) { ERX.Scenes.push('skills', { game: this }); return; }
         if (K.wasPressed('inventory')) { ERX.Scenes.push('inventory', { game: this }); return; }
@@ -708,7 +925,7 @@
       } else if (this.state === 'black') {
         // nothing. absolutely nothing.
       } else {
-        if (this.state !== 'float' && this.state !== 'launch') this.player.update(dt);
+        if (this.state !== 'float' && this.state !== 'launch' && this.state !== 'skyfall' && this.state !== 'pull' && this.state !== 'recall') this.player.update(dt);
         for (const g of Object.values(this.gates)) g.update(dt);
         if (this.dummy) this.dummy.update(dt);
         for (const e of this.enemies) e.update(dt);
@@ -720,6 +937,13 @@
         for (const s of this.shockwaves) s.update(dt);
         this.shockwaves = this.shockwaves.filter((s) => !s.done);
         if (this.levelId === 'void') this._updateVoid(dt);
+        if (this.level.update) this.level.update(dt, this);
+        if (this.fall) this.fall.update(dt);
+        if (this.pull) this._updatePull(dt);
+        if (this.recall) this._updateRecall(dt);
+        if (this.checkshot && this.checkshot.onT > 0) this.checkshot.onT += dt;
+        if (this.gift) this.gift.t += dt;
+        this._updateBlocker(dt);
         for (const fx of this.effects) fx.update(dt);
         this.effects = this.effects.filter((fx) => !fx.dead);
       }
@@ -748,7 +972,7 @@
 
       this._triggers();
       if (this.state !== 'intro') this.hudAlpha = Math.min(1, this.hudAlpha + dt * (this.state === 'play' || this.state === 'dead' ? 2 : 0));
-      if (this.state !== 'elevator' && this.state !== 'nebula' && this.state !== 'reveal' && this.state !== 'black') this.camera.update(dt, this.player, this.level);
+      if (this.state !== 'elevator' && this.state !== 'nebula' && this.state !== 'reveal' && this.state !== 'black' && this.state !== 'skyfall') this.camera.update(dt, this.player, this.level);
       const target = this.state === 'intro' || this.state === 'waking' ? 0.06 : this.level.darknessAt(this.player.cx, this.arenaLit);
       this.darkness = U.approach(this.darkness, target, this.flashT > 0 ? 12 : 1.4, dt);
     }
@@ -906,11 +1130,25 @@
           return;
         }
       }
+      if (this.levelId === 'world1') {
+        const cs = this.checkshot;
+        if (cs && Math.abs(p.cx - cs.x) < 16 && p.onGround) {
+          this.prompt = { x: cs.x, y: cs.y - 46, text: cs.on ? '{use} RECALL TO THE VOID (VRD)' : '{use} ACTIVATE THE CHECKSHOT' };
+          if (K.wasPressed('use')) this.runScript(ERX.Story.world.checkshot);
+          return;
+        }
+        const bl = this.blocker;
+        if (bl && bl.landed && Math.abs(p.cx - bl.x) < 34) {
+          this.prompt = { x: bl.x, y: bl.y - 34, text: '{use} TALK' };
+          if (K.wasPressed('use')) this.runScript(ERX.Story.world.slimeTalk);
+          return;
+        }
+      }
       if (this.levelId === 'void' && this.worlds && this.worlds.unlocked[0]) {
         const L = this.level;
         if (Math.abs(p.cx - L.jumpX) < 16 && p.onGround) {
           this.prompt = { x: L.jumpX, y: L.floorY - 40, text: '{use} JUMP INTO WORLD 1' };
-          if (K.wasPressed('use')) this.runScript(ERX.Story.void.jumpIntoWorld);
+          if (K.wasPressed('use')) this.runScript(ERX.Story.world.jump);
           return;
         }
         const d = this.hqDoor;
@@ -975,6 +1213,8 @@
         out.push({ x: l.x, y: l.y, r, color: l.color, intensity: inten });
       }
       out.push({ x: this.player.cx, y: this.player.y + 10, r: 34, color: null, intensity: 1 });
+      if (this.level.liveLights) for (const l of this.level.liveLights(this)) out.push(l);
+      if (this.checkshot) out.push({ x: this.checkshot.x, y: this.checkshot.y - 26, r: this.checkshot.on ? 64 : 26, color: '#c89aff', intensity: 1 });
       const o = this.orb;
       if (o && o.state !== 'gone') out.push({ x: o.x, y: o.y, r: 96, color: ORB_LIGHTS[Math.floor(t * 3) % 6], intensity: 0.9 + 0.1 * Math.sin(t * 5) });
       if (o) out.push({ x: o.baseX, y: o.floorY - 20, r: 40, color: null, intensity: 1 });
@@ -997,8 +1237,9 @@
       c.imageSmoothingEnabled = false;
       c.fillStyle = { deep: '#0e1028', void: '#05040f', hq: '#120c1a' }[this.levelId] || '#0c0912';
       c.fillRect(0, 0, vw, vh);
+      if (this.level.drawSky) this.level.drawSky(c, cam, vw, vh, this);
       if (this.backWall) c.drawImage(this.backWall, -cam.ix, -cam.iy);
-      else ERX.Paint.drawTiled(c, this.bgCanvas, cam.x * (this.levelId === 'void' ? 0.2 : 0.5), -cam.iy, vw);
+      else if (!this.level.drawSky) ERX.Paint.drawTiled(c, this.bgCanvas, cam.x * (this.levelId === 'void' ? 0.2 : 0.5), -cam.iy, vw);
       if (this.worlds) this._renderSky(c, cam);
       c.drawImage(this.tilesCanvas, -cam.ix, -cam.iy);
       c.drawImage(this.decorCanvas, -cam.ix, -cam.iy);
@@ -1018,13 +1259,33 @@
       if (this.orb) this.orb.render(c, cam);
       for (const n of this.npcs) this._drawNpc(c, cam, n);
       if (this.levelId === 'void') this._renderVoidThings(c, cam);
+      if (this.level.drawLive) this.level.drawLive(c, cam, this);
+      if (this.checkshot) this._renderCheckshot(c, cam);
+      if (this.blocker) this._renderBlocker(c, cam);
       for (const fx of this.effects) if (BACK_FX[fx.kind]) fx.render(c, cam);
       if (this.dummy) this.dummy.render(c, cam);
       for (const e of this.enemies) e.render(c, cam);
       for (const b of this.bolts) b.render(c, cam);
       if (this.state === 'launch') this._renderLaunch(c, cam);
+      else if (this.state === 'skyfall' && this.fall) this.fall.renderWorld(c, cam);
+      else if (this.state === 'pull' && this.pull) this._renderPull(c, cam);
+      else if (this.state === 'recall' && this.recall) this._renderRecall(c, cam);
       else this.player.render(c, cam);
-      for (const fx of this.effects) if (!BACK_FX[fx.kind] && fx.layer !== 'screen') fx.render(c, cam);
+      if (this.gift) this._renderGift(c, cam);
+      // awakened moves go on the glow layer (js/game/abilities.js, Glow); everything else straight onto the view
+      // (un-awakened element moves go on the lighter bold layer: Bold, same file)
+      const Glow = ERX.Abilities.Glow, Bright = ERX.Abilities.Bright, Bold = ERX.Abilities.Bold;
+      let glow = null, glowCol = null, bright = null, brightCol = null, bold = null;
+      for (const fx of this.effects) {
+        if (BACK_FX[fx.kind] || fx.layer === 'screen') continue;
+        if (Glow.wants(fx)) { if (!glow) { glow = Glow.begin(vw, vh); glowCol = fx.pal && fx.pal.c; } fx.render(glow, cam); }
+        else if (Bright.wants(fx)) { if (!bright) { bright = Bright.begin(vw, vh); brightCol = fx.pal && fx.pal.c; } fx.render(bright, cam); }
+        else if (Bold.wants(fx)) { if (!bold) bold = Bold.begin(vw, vh); fx.render(bold, cam); }
+        else fx.render(c, cam);
+      }
+      if (bold) Bold.end(c);
+      if (bright) Bright.end(c, brightCol || '#ffffff');
+      if (glow) Glow.end(c, glowCol || '#ffffff');
       for (const fx of this.effects) if (fx.layer === 'screen') { if (fx.kind === 'custom') fx.render(c, cam); else ERX.Abilities.renderScreen(c, fx, vw, vh); }
       if (this.frontLayer) c.drawImage(this.frontLayer, -cam.ix, -cam.iy);
       if (this.levelId === 'void') this._renderVoidFx(c, cam);
@@ -1035,6 +1296,12 @@
       this.lighting.render(c, cam, vw, vh, this.darkness, this._lights());
       ERX.ChaosWorld.render(c, this, vw, vh);
       if (this.flashT > 0) { c.fillStyle = 'rgba(255,255,255,' + Math.min(0.85, this.flashT * 2.5).toFixed(3) + ')'; c.fillRect(0, 0, vw, vh); }
+      if (this.impactT > 0) {
+        // impact frame: the whole screen in stark inverted black and white, for a blink
+        c.save(); c.globalCompositeOperation = 'saturation'; c.fillStyle = '#808080'; c.fillRect(0, 0, vw, vh);
+        c.globalCompositeOperation = 'difference'; c.fillStyle = '#ffffff'; c.fillRect(0, 0, vw, vh); c.restore();
+      }
+      if (this.fall) this.fall.renderOverlay(c, vw, vh);
       if (this.state === 'dead') {
         c.fillStyle = 'rgba(40,0,10,' + Math.min(0.5, this.deadT * 0.4).toFixed(3) + ')';
         c.fillRect(0, 0, vw, vh);
@@ -1050,14 +1317,22 @@
         this.cine.drawScreen(ctx, W, H);
         return;
       }
-      ctx.drawImage(this.view, 0, 0, vw * this.zoom, vh * this.zoom);
+      // an Ultimate can take over the camera (Planetfall...): zoom in on a point, letterbox bars
+      const uc = this.ultCam && this.t - this.ultCam.t < 0.25 ? this.ultCam : null;
+      if (uc && (uc.zoom || 1) > 1.001) {
+        const z = uc.zoom, sw = vw / z, sh = vh / z;
+        const sx = U.clamp(uc.x - cam.ix - sw / 2, 0, vw - sw), sy = U.clamp(uc.y - cam.iy - sh / 2, 0, vh - sh);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(this.view, sx, sy, sw, sh, 0, 0, vw * this.zoom, vh * this.zoom);
+      } else ctx.drawImage(this.view, 0, 0, vw * this.zoom, vh * this.zoom);
+      if (uc && uc.bars > 0) { const bh = Math.round(uc.bars * H * 0.11); ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, W, bh); ctx.fillRect(0, H - bh, W, bh); }
 
       this._drawWake(ctx, W, H);
       if (this.state === 'dead' && this.deadT > 0.4) {
         F.draw(ctx, 'YOU DIED', W / 2, Math.round(H * 0.4), { scale: 2, color: '#ff6a4f', outline: T.ink, shadow: '#3a0008', shadowOffset: 2, align: 'center' });
         F.draw(ctx, '...for now. The Immortality Stone is warming up.', W / 2, Math.round(H * 0.4) + 22, { color: '#d4daf5', outline: T.ink, align: 'center' });
       }
-      ERX.HUD.render(ctx, W, H, this);
+      if (!(uc && uc.bars > 0.3)) ERX.HUD.render(ctx, W, H, this);
       this.dialogue.render(ctx, W, H);
     }
 
@@ -1465,7 +1740,7 @@
 
     _drawWake(ctx, W, H) {
       if (this.state === 'play' && this.lids >= 1) return;
-      if (this.state === 'dead' || this.state === 'elevator' || this.state === 'nebula' || this.state === 'reveal' || this.state === 'float' || this.state === 'black' || this.state === 'launch') return;
+      if (this.state === 'dead' || this.state === 'elevator' || this.state === 'nebula' || this.state === 'reveal' || this.state === 'float' || this.state === 'black' || this.state === 'launch' || this.state === 'skyfall' || this.state === 'pull' || this.state === 'recall') return;
       const open = this.state === 'intro' ? 0 : this.lids;
       const cy = U.clamp(Math.round((this.player.y + 12 - this.camera.y) * this.zoom), 40, H - 40);
       const gap = Math.round(H * open);

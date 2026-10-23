@@ -469,4 +469,7 @@
     },
   };
   for (const id of Object.keys(EL)) ERX.SfxBank['element_' + id] = EL[id];
+
+  // the guitar rig, for anything else that wants to play real music (awakened Sound)
+  ERX.Guitar = { pedal, powerChord, lead, semis };
 })(window.ERX = window.ERX || {});

@@ -2,8 +2,10 @@
  * Shared helpers for the element kits (js/data/kits/*.js).
  *
  * A kit:
- *   { status, up, fx, block: [name, style], dash: [name, style],
- *     m1: move, s: [5 moves], ult: { name, desc, dmg, charge, run } }
+ *   { status, fx, block: [name, style], dash: [name, style],
+ *     m1: move, s: [5 moves], ult: { name, desc, dmg, charge, run },
+ *     m1Up: move (what M1+ turns your M1 into), dashUp: { name, desc, dmg, life, spawn, update, draw, onEnd } (DASH+) }
+ * Upgrading never changes a move's colours: upgraded moves are bigger (H.sc), faster, stronger and more detailed.
  * A move (see js/game/abilities.js):
  *   { name, desc, dmg, cd, mp, kind: 'custom', life,
  *     spawn(e, g, A), update(e, dt, g, A), draw(e, ctx, ox, oy, A) }
@@ -19,9 +21,12 @@
   ERX.Kits = ERX.Kits || {};
   const U = ERX.U;
 
+  /** The little ring a projectile leaves where it lands. */
+  const POP = { life: 0.18, draw(e, ctx, ox, oy, A) { const k = e.t / e.life, x = e.x + ox, y = e.y + oy; A.alpha(ctx, 1 - k, () => { A.ring(ctx, x, y, e.r * (0.4 + k * 0.8), e.pal.l || e.pal.c); A.ring(ctx, x, y, Math.max(1, e.r * (0.2 + k * 0.6)), '#ffffff'); }); } };
+
   const H = {
-    /** Size multiplier for upgraded moves. */
-    sc(e) { return e.up ? 1.4 : 1; },
+    /** Size multiplier: upgraded moves are bigger, and awakened moves (not Ultimates) are bigger still. */
+    sc(e) { return (e.up ? 1.4 : 1) * (e.isAwk && !e.isUlt ? 1.25 : 1); },
     /** 0 -> 1 over the effect's life. */
     k(e) { return Math.min(1, e.t / e.life); },
     /** Put the effect in front of the player (dx forward, dy from the chest). */
@@ -36,7 +41,8 @@
       o = o || {};
       if (o.gravity) e.vy += o.gravity * dt;
       if (o.homing) H.home(e, dt, A, o.homing, o.range || 170);
-      e.x += e.vx * dt; e.y += e.vy * dt;
+      const spd = e.up ? 1.2 : 1;   // upgraded: faster
+      e.x += e.vx * dt * spd; e.y += e.vy * dt * spd;
       const r = (o.r || 5) * H.sc(e);
       const hit = A.hit(e, { x: e.x - r, y: e.y - r, w: r * 2, h: r * 2 }, { dir: Math.sign(e.vx) || e.dir, kb: o.kb });
       if (hit && !o.pierce) return 'hit';
@@ -61,15 +67,24 @@
         life: o.life || 1.2,
         update(e, dt, g, A) {
           if (o.tick) o.tick(e, dt, A);
+          (e._tr || (e._tr = [])).unshift(e.x, e.y); if (e._tr.length > 6) e._tr.length = 6;   // where it just was (for the trail)
           const r = H.fly(e, dt, A, o);
           if (r === 'hit' || r === 'wall') {
             if (o.boom) A.blast(e, e.x, e.y, o.boom * H.sc(e));
             if (o.onHit) o.onHit(e, A, r);
             A.puff(e, e.x, e.y, 5);
+            if (!o.boom && !o.onHit) A.spawn(e, POP, { x: e.x, y: e.y, r: 7 * H.sc(e), dmg: 0 });
             e.dead = true;
           }
         },
-        draw,
+        // a soft glow in your colour under every projectile, so even the little ones read
+        // ...and two fading afterimages behind it
+        draw(e, ctx, ox, oy, A) {
+          if (e.pal) A.glow(ctx, e.x + ox, e.y + oy, Math.max(2, (o.r || 4) * 0.8 * H.sc(e)), e.pal.c, 0.22);
+          const tr = e._tr;
+          if (tr) for (let i = tr.length - 2; i >= 2; i -= 2) { const ghost = Object.create(e); ghost.x = tr[i]; ghost.y = tr[i + 1]; A.alpha(ctx, 0.35 * (1 - i / 6), () => draw(ghost, ctx, ox, oy, A)); }
+          draw(e, ctx, ox, oy, A);
+        },
       };
     },
     /** Rotate a point. */
@@ -95,6 +110,48 @@
     },
     /** Draw a player silhouette with its feet at (x, y). */
     drawGhost(ctx, A, pose, x, y, facing, color) { ERX.PlayerSide.draw(ctx, H.ghost(A, pose, facing, color), x, y, facing); },
+    // ---- for upgraded dashes (kit.dashUp): a custom effect that lives a little past the dash itself
+    /** True while you're mid-dash; records your path in e.pts ({ x, y (chest), f (feet), t }). */
+    dashing(e, A) {
+      const p = A.p, here = () => ({ x: p.cx, y: p.y + 10, f: p.feet, t: e.t });
+      if (!e.pts) e.pts = [here()];
+      if (p.dashT > 0 && !e.over) { e.pts.push(here()); return true; }
+      e.over = true; return false;   // (a second dash doesn't count)
+    },
+    /** The last point of your dash path. */
+    end(e) { return e.pts[e.pts.length - 1]; },
+    /** Walk along your dash path every `step` px: fn(x, y (chest), f (feet), u (0 at the start -> 1 at the end)). */
+    along(e, step, fn) {
+      const pts = e.pts;
+      if (!pts || !pts.length) return;
+      let total = 0;
+      for (let i = 1; i < pts.length; i++) total += Math.abs(pts[i].x - pts[i - 1].x) + Math.abs(pts[i].y - pts[i - 1].y);
+      if (total < 1) { fn(pts[0].x, pts[0].y, pts[0].f, 1); return; }
+      let acc = 0, next = 0;
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1], b = pts[i], seg = Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
+        while (seg > 0 && next <= acc + seg) { const q = (next - acc) / seg; fn(U.lerp(a.x, b.x, q), U.lerp(a.y, b.y, q), U.lerp(a.f, b.f, q), next / total); next += step; }
+        acc += seg;
+      }
+    },
+    /** Seconds since your dash ended (0 while it's still going). */
+    since(e) { return e.over ? e.t - H.end(e).t : 0; },
+    // ---- pushing things around
+    /** Move a target by (dx, dy) unless something solid is in the way (the tutorial dummy and bosses don't budge). */
+    shove(A, t, dx, dy) {
+      if (t.tutorial || t.immovable || t.dead) return false;
+      const nx = t.x + dx, ny = t.y + (dy || 0);
+      if (ERX.GameEngine.Physics.overlapsSolid(A.g.level, nx, ny, t.w, t.h)) return false;
+      t.x = nx; t.y = ny; return true;
+    },
+    /** Throw a target up into the air. */
+    launch(t, v) { if (t.tutorial || t.immovable || t.dead) return; t.vy = -v; t.onGround = false; },
+    /** Inflict a status other than your element's own. */
+    inflict(e, t, id) { if (t.applyStatus && !t.dead) t.applyStatus(id, e.potency || 0); },
+    /** Hit whatever you pass through mid-dash (once each). */
+    dashBody(e, A, o) { const p = A.p; return A.hit(e, { x: p.x - 4, y: p.y, w: p.w + 8, h: p.h }, Object.assign({ dir: p.facing, kb: 0.8 }, o)); },
+    /** The stretch of ground your dash covered: { x0, x1, f }. */
+    span(e) { const xs = e.pts.map((q) => q.x); return { x0: Math.min(...xs), x1: Math.max(...xs), f: e.pts[0].f }; },
     /** A short burst of sparks in the move's colours (cosmetic). */
     sparks(A, x, y, n, col, speed) {
       for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, sp = (speed || 60) * (0.4 + Math.random()); A.g.fx.add({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.3 + Math.random() * 0.3, color: col, size: 1, fadeOut: 0.2 }); }

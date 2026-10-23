@@ -164,8 +164,8 @@
       }
       if (this.invulnT > 0) return 'ignored';
       // armour soaks some of every hit (always at least 1 gets through)
-      const armor = ERX.Armor && ERX.Armor.get(this.character.armor);
-      if (armor) damage = Math.max(1, damage - armor.def);
+      const def = ERX.Inventory ? ERX.Inventory.defense(this.character) : 0;
+      if (def) damage = Math.max(1, damage - def);
       damage = Math.max(1, Math.round(damage * this.ab.defense()));
       this.ab.ult = Math.min(100, this.ab.ult + damage * 0.8);
       // nobody dies in the tutorial (the Immortality Stone sees to that, later)
@@ -212,6 +212,7 @@
       this.invulnT = Math.max(0, this.invulnT - dt);
       this.dashCd = Math.max(0, this.dashCd - dt);
       this.dashGrace = Math.max(0, (this.dashGrace || 0) - dt);
+      this.vanishT = Math.max(0, (this.vanishT || 0) - dt);
       this.coyoteT = Math.max(0, this.coyoteT - dt);
       this.bufferT = Math.max(0, this.bufferT - dt);
       this.ab.update(dt);
@@ -258,7 +259,7 @@
         this.vy = 0;
         if (!this.awkDash) ERX.Abilities.dashFx(this.game, this);
         // an upgraded element dash hits whatever you pass through
-        if (this.dashUp && !this.awkDash) {
+        if (this.dashUp && !this.awkDash && this.dashHit) {
           const kit = this.kit();
           ERX.Abilities.hitWhere(this.game, this.dashHit, (b) => Physics.rectsOverlap(b, { x: this.x - 2, y: this.y, w: this.w + 4, h: this.h }), { dir: this.facing, kb: 0.8 });
           void kit;
@@ -307,15 +308,17 @@
           this.dashStyle = ak ? 'awk-' + (ak.dash.style || 'none') : kit ? kit.dash[1] : null;
           this.dashUp = !!kit && ERX.Abilities.rank(this.game, 'dash') >= 2;
           if (ak) this._awakenedDash(ak);
-          if (this.dashUp) {
+          else if (this.dashUp && kit.dashUp) this._upgradedDash(kit);   // an upgraded dash is a whole new move
+          if (this.dashUp && !kit.dashUp) {
             const el = this.game.element();
-            this.dashHit = { hit: new Set(), hitT: new Map(), t: 0, dmg: 10 * (1 + 0.06 * (this.level - 1)), status: kit.status, potency: ERX.Abilities.rank(this.game, 'potency'), pal: ERX.Abilities.palette(el, kit, true), up: true, x: this.cx };
+            this.dashHit = { el: el.id, hit: new Set(), hitT: new Map(), t: 0, dmg: 10 * (1 + 0.06 * (this.level - 1)), status: kit.status, potency: ERX.Abilities.rank(this.game, 'potency'), pal: ERX.Abilities.palette(el, kit, true), up: true, x: this.cx };
           }
           if (this.dashStyle === 'blink' && !ak) ERX.Abilities.puff(this.game, this.cx, this.y + 10, kit.fx, ERX.Abilities.palette(this.game.element(), kit, this.dashUp), 10, 1.5);
           this.attackT = 0;
           this.stats.dashes++;
           this.dodgeShown = false;
           sfx('dash');
+          { const ex = this.game.element && this.game.element(); if (ex && ERX.ElementSfx) ERX.ElementSfx.dash(ex.id, !!ak); }
           ERX.FX.shake(0.8, 0.08);
           this.game.dust(this.cx, this.feet, 8);
           this.ghostT = 0;
@@ -398,13 +401,22 @@
       if (ak && this.awkState === 'idle' && ak.idle.step) ak.idle.step(ERX.Abilities.api(this.game), this, dt);
     }
 
+    /** Spawn your upgraded dash (kit.dashUp: a custom effect, in your element's own colours). */
+    _upgradedDash(kit) {
+      const g = this.game, el = g.element(), d = kit.dashUp;
+      this.dashHit = null;
+      const def = { spawn: d.spawn, update: d.update, draw: d.draw, onEnd: d.onEnd, life: d.life || 0.6, layer: d.layer };
+      const lvl = 1 + 0.06 * (this.level - 1);
+      ERX.Abilities.api(g).spawn({ pal: ERX.Abilities.palette(el, kit, true), dmg: (d.dmg || 10) * lvl, status: kit.status, potency: ERX.Abilities.rank(g, 'potency'), up: true, isUlt: false, isAwk: false, el: el.id, dir: this.facing, x: this.cx, y: this.y + 10 }, def, {});
+    }
+
     /** Spawn your awakened dash (a custom effect that can hurt things). */
     _awakenedDash(ak) {
       const g = this.game, el = g.element(), d = ak.dash;
       const up = ERX.Abilities.rank(g, 'dash') >= 2;
       const def = { spawn: d.spawn, update: d.update, draw: d.draw, onEnd: d.onEnd, life: d.life || 0.6, layer: d.layer };
       const lvl = 1 + 0.06 * (this.level - 1);
-      ERX.Abilities.api(g).spawn({ pal: ERX.Abilities.palette(el, ak, up), dmg: (d.dmg || 12) * lvl * (up ? 1.5 : 1), status: ak.status, potency: ERX.Abilities.rank(g, 'potency'), up, isUlt: false, dir: this.facing, x: this.cx, y: this.y + 10 }, def, {});
+      ERX.Abilities.api(g).spawn({ pal: ERX.Abilities.palette(el, ak, up), dmg: (d.dmg || 12) * lvl * (up ? 1.5 : 1), status: ak.status, potency: ERX.Abilities.rank(g, 'potency'), up, isUlt: false, isAwk: true, el: el.id, dir: this.facing, x: this.cx, y: this.y + 10 }, def, {});
     }
 
     pose() {
@@ -438,7 +450,7 @@
       for (const g of this.ghosts) {
         if (this.dashStyle === 'blink' || (this.dashStyle && this.dashStyle.startsWith('awk'))) continue;
         ctx.globalAlpha = (g.t / 0.25) * 0.55;
-        PSide.draw(ctx, ghostSprite(this.look, g.facing, elDash && this.dashStyle ? (this.dashUp ? (ERX.Abilities.kit(elDash.id).up === 'rainbow' ? '#ffffff' : ERX.Abilities.kit(elDash.id).up) : elDash.color) : null), g.x + ox, g.y + oy, g.facing);
+        PSide.draw(ctx, ghostSprite(this.look, g.facing, elDash && this.dashStyle ? elDash.color : null), g.x + ox, g.y + oy, g.facing);
       }
       ctx.globalAlpha = 1;
       // speed lines
@@ -448,12 +460,14 @@
       }
       if (this.invulnT > 0 && Math.floor(this.invulnT * 20) % 2 === 0 && this.hurtT <= 0) return;
       if (this.dashT > 0 && (this.dashStyle === 'blink' || this.dashStyle === 'awk-blink')) return;   // teleporting: you're not really there
+      if (this.vanishT > 0) return;                                                                   // dissolved into mist (or similar)
       const [pose, frame] = this.pose();
       const ak = this.awk(), A = ak ? ERX.Abilities.api(this.game) : null;
       const hold = this.ultHold && typeof this.ultHold.pose === 'function' ? this.ultHold.pose(this.ultHold.t || 0) : null;
       // an awakened dash can bring its own pose (and face the other way: a moonwalk)
       const dashJ = ak && this.dashT > 0 && ak.dash && ak.dash.pose ? ak.dash.pose(this.dashT, this) : null;
-      const joints = hold || this.cineJoints || dashJ || this.awkJ;
+      const guardJ = ak && this.blocking && ak.guard && ak.guard.pose ? ak.guard.pose(this.animT, this) : null;
+      const joints = hold || this.cineJoints || dashJ || guardJ || this.awkJ;
       const face = dashJ && ak.dash.flip ? -this.facing : this.facing;
       const lift = (this.cineLift || 0) + (joints && joints.lift ? joints.lift : 0) + (this.ultHold && this.ultHold.lift ? this.ultHold.lift : 0);
       const cv = joints ? PSide.frameJoints(this.look, joints, face) : PSide.frame(this.look, pose, frame, this.facing);
@@ -461,7 +475,9 @@
       // awakened effects behind you (runs leave trails, auras...)
       if (ak && ak.look && ak.look.back) ak.look.back(ctx, F);
       if (ak && this.awkState && ak[this.awkState].back) ak[this.awkState].back(ctx, F);
-      PSide.draw(ctx, cv, Math.round(this.cx) + ox, Math.round(this.feet - lift) + oy, joints ? face : this.facing, pose === 'lie' && !joints);
+      const bx = Math.round(this.cx) + ox, by = Math.round(this.feet - lift) + oy, bf = joints ? face : this.facing;
+      if (ak && ak.look && ak.look.body && pose !== 'lie') ak.look.body(ctx, cv, bx, by, bf, F);
+      else PSide.draw(ctx, cv, bx, by, bf, pose === 'lie' && !joints);
       // ...and in front (glowing eyes, flames, ice on your cheek...)
       if (ak && this.awkState && ak[this.awkState].fx) ak[this.awkState].fx(ctx, F);
       if (ak && ak.look && ak.look.fx) ak.look.fx(ctx, F);

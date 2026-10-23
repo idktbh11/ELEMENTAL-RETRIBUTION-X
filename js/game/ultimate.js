@@ -73,7 +73,7 @@
           g.fx.add({ x: p.cx + p.facing * 3, y: p.y + 9, vx: Math.cos(a) * 90, vy: Math.sin(a) * 90, life: 0.4, color: i % 2 ? this.pal.c : '#ffffff', size: 1, fadeOut: 0.3 });
         }
       }
-      if (cross(T.charge)) { if (typeof this.ch.pose !== 'function') p.cinePose = this.ch.pose || 'raise'; sfx(this.awk ? 'awakenCharge' : 'ultCharge'); }
+      if (cross(T.charge)) { if (typeof this.ch.pose !== 'function') p.cinePose = this.ch.pose || 'raise'; sfx(this.awk ? 'awakenCharge' : 'ultCharge'); if (ERX.ElementSfx) ERX.ElementSfx.charge(this.el.id, this.awk); }
       if (t >= T.charge && t < T.chargeEnd && typeof this.ch.pose === 'function') {
         // a full joint animation for the charge (blended so it flows out of the clap)
         const tgt = this.ch.pose(t - T.charge, this.chargeK());
@@ -102,7 +102,14 @@
       if (this.music) ERX.Audio.playMusic(this.music);
       // fire!
       const e0 = Object.assign({ x: p.cx + p.facing * 10, y: p.y + 10, dir: p.facing, t: 0, hit: new Set(), hitT: new Map() }, this.base);
+      const n0 = g.effects.length;
+      if (ERX.ElementSfx) ERX.ElementSfx.ult(this.el.id, this.awk);
       this.kit.ult.run(this.A, e0, this.el);
+      // awakened: the whole thing plays out like a film, for as long as it lasts
+      if (this.awk && this.kit.ult.cinema !== false) {
+        const lives = g.effects.slice(n0).map((f) => f.life || 0);
+        ERX.Awakening.cinema(g, this.kit, e0, U.clamp(lives.length ? Math.max(...lives) : 4, 3, 7));
+      }
     }
 
     /** Clap flash, glowing eyes and the charge, drawn into the world view. */

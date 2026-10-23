@@ -9,7 +9,11 @@
   const { J, IDLE, RUN } = W;
   const Phys = () => ERX.GameEngine.Physics;
   const dot = (g, x, y, vx, vy, color, o) => g.fx.add(Object.assign({ x, y, vx, vy, life: 0.5, color, size: 1, fadeOut: 0.3 }, o));
+  // the size of the view on screen (it follows the window, so never assume 480x270)
+  const view = (A) => A.g.view || { width: 480, height: 270 };
   const holdStun = (t, s) => { if (!t.applyStatus) return; t.applyStatus('stagger', 0); if (t.status.stagger) t.status.stagger.t = s; };
+  // set an enemy's vertical speed for this frame, cancelling the gravity it's about to get
+  const floatV = (t, vy, dt) => { t.vy = Math.min(400, vy - 900 * dt); };
 
   // ============================================================== COSMIC (starfield)
   const TWINK = { life: 0.7, draw(e, ctx, ox, oy, A) { const k = e.t / e.life; A.alpha(ctx, 1 - k, () => A.star(ctx, e.x + ox, e.y + oy, k < 0.4 ? 2 : 1, e.c || '#ffd34d', '#ffffff')); } };
@@ -17,7 +21,7 @@
   const NEB = (ctx, A, x, y, r, t, a) => { A.alpha(ctx, a, () => { for (let i = 0; i < 6; i++) A.disc(ctx, x + Math.cos(t * 0.5 + i * 1.1) * r * 0.45, y + Math.sin(t * 0.5 + i * 1.1) * r * 0.25, Math.round(r * 0.4), ['#2a1a6a', '#4a2a9a', '#6a3aaa', '#2a4aaa', '#8a3a9a', '#1a2a6a'][i]); }); for (let i = 0; i < 14; i++) if ((Math.floor(t * 4) + i) % 3) A.px(ctx, x + Math.cos(i * 2.4) * r * ((i * 7) % 10) / 10, y + Math.sin(i * 1.7) * r * 0.5 * ((i * 3) % 10) / 10, 1, 1, i % 4 ? '#ffffff' : '#ffd34d'); };
   AW.cosmic = {
     color: '#4a6aff', up: '#ffd34d', status: 'starstruck', fx: 'stars', block: ['Nebula Shield', 'shield'],
-    icons: ['novaFist', 'supernovaSeed', 'wormhole', 'lion', 'pulsar'],
+    icons: ['supernovaSeed', 'wormhole', 'lion', 'pulsar', 'shootingStar'],
     look: { fx(ctx, F) { for (let i = 0; i < 4; i++) { const a = F.t * 1.3 + i * 1.57, x = F.x + Math.cos(a) * 12, y = F.y - 13 + Math.sin(a) * 5; F.A.star(ctx, x, y, 1, i % 2 ? '#ffd34d' : '#9ab8ff', '#ffffff'); } } },
     idle: {
       pose: (t) => IDLE.float(t, { lift: 5 }),
@@ -41,10 +45,18 @@
     },
     m1: {
       name: 'Nova Fist', dmg: 9, cd: 0.36, kind: 'custom', life: 0.3,
-      desc: 'A punch that pops a tiny supernova where it lands, scattering stardust.',
+      desc: 'A punch that pops a small supernova where it lands, scattering stardust over everything nearby.',
       spawn(e, g, A) { A.sfx('punchHit', { minGap: 0.04 }); },
-      update(e, dt, g, A) { H.at(e, A, 0); H.melee(e, A, 32 * H.sc(e), 20, { onHit(t) { const c = A.center(t); e.nova = c; twinkles(A, e, c.x, c.y, 5, 70); } }); },
-      draw(e, ctx, ox, oy, A) { const k = e.t / e.life, x = e.x + ox + e.dir * (10 + 12 * Math.min(1, k * 4)), y = e.y + oy; A.alpha(ctx, 1 - k, () => { A.disc(ctx, x, y, 3, '#4a6aff', '#ffffff'); if (e.nova) { const n = e.nova; A.star(ctx, n.x + ox, n.y + oy, Math.round(2 + k * 5), '#ffd34d', '#ffffff'); A.ring(ctx, n.x + ox, n.y + oy, 3 + k * 10, '#9ab8ff'); } }); },
+      update(e, dt, g, A) { H.at(e, A, 0); H.melee(e, A, 32 * H.sc(e), 22, { onHit(t) { if (!e.nova) { const c = A.center(t); e.nova = c; twinkles(A, e, c.x, c.y, 8, 90); } } }); if (e.nova && !e.popd) { e.popd = true; A.hitR(e, e.nova.x, e.nova.y, 16 * H.sc(e), { mult: 0.5, kb: 0.6 }); A.spawn(e, W.SHOCK, { x: e.nova.x, y: e.nova.y, r: 18, dmg: 0, life: 0.3 }); } },
+      draw(e, ctx, ox, oy, A) {
+        const k = e.t / e.life, d = e.dir, x = e.x + ox + d * (10 + 12 * Math.min(1, k * 4)), y = e.y + oy;
+        A.alpha(ctx, 1 - k, () => {
+          for (let i = 0; i < 5; i++) A.px(ctx, x - d * (i * 4 + 5) - (d > 0 ? 3 : 0), y - 4 + (i % 3) * 4, 3, 1, i % 2 ? '#9ab8ff' : '#ffffff');
+          A.alpha(ctx, 0.4, () => A.disc(ctx, x, y, 6, '#4a6aff'));
+          A.disc(ctx, x, y, 4, '#4a6aff', '#ffffff');
+          if (e.nova) { const n = e.nova; A.star(ctx, n.x + ox, n.y + oy, Math.round(4 + k * 7), '#ffd34d', '#ffffff'); A.disc(ctx, n.x + ox, n.y + oy, Math.max(1, Math.round(5 * (1 - k))), '#ffffff'); }
+        });
+      },
     },
     s: [
       {
@@ -55,12 +67,18 @@
         draw(e, ctx, ox, oy, A) { const x = e.x + ox, y = e.y + oy; if (!e.boom) { const k = e.t / 1.2, r = Math.round(1 + k * 6 + (k > 0.7 ? Math.sin(e.t * 50) * 1.5 : 0)); A.glow(ctx, x, y, r + 3, k > 0.7 ? '#ffffff' : '#ffd34d', 0.25 + k * 0.3); A.disc(ctx, x, y, Math.max(1, r), '#ffd34d', '#ffffff'); return; } const k = (e.t - 1.2) / 0.6, R = 44 * H.sc(e); A.alpha(ctx, 1 - k, () => { A.disc(ctx, x, y, Math.round(R * 0.4 * (1 - k)) + 1, '#ffffff'); A.ring(ctx, x, y, R * Math.min(1, k * 2), '#ffd34d', R * Math.min(1, k * 2)); A.ring(ctx, x, y, R * 0.7 * Math.min(1, k * 2), '#4a6aff', R * 0.7 * Math.min(1, k * 2)); }); },
       },
       {
-        name: 'Wormhole', dmg: 18, cd: 9, mp: 7, kind: 'custom', life: 3,
-        desc: 'Open two linked wormholes. Enemies sucked into the first are spat out of the second, dizzy and hurt.',
-        spawn(e, g, A) { const p = A.p; e.ax = p.cx + p.facing * 40; e.bx = p.cx - p.facing * 30; e.y0 = p.y + 8; A.sfx('hover'); },
-        update(e, dt, g, A) { for (const o of H.nearby(A, e.ax, e.y0, 60)) { const t = o.t; if (t.tutorial) continue; t.vx = U.approach(t.vx, Math.sign(e.ax - o.c.x) * 150, 6, dt); if (Math.abs(o.c.x - e.ax) < 8 && !t._warped) { t._warped = true; if (!Phys().overlapsSolid(g.level, e.bx - t.box.w / 2, t.box.y, t.box.w, t.box.h)) t.x = e.bx - t.box.w / 2; A.damage(e, t, 1, 0.8); if (t.applyStatus) t.applyStatus('starstruck', e.potency); A.sfx('orbDash', { minGap: 0.1 }); } } for (const t of A.targets()) if (t.tutorial) A.tickR(e, e.ax, e.y0, 10, 0.6, { kb: 0 }); },
-        onEnd(e, A) { for (const t of A.targets()) delete t._warped; },
-        draw(e, ctx, ox, oy, A) { const f = A.fade(e, 0.2, 0.4); for (const [x, col] of [[e.ax, '#4a6aff'], [e.bx, '#ffd34d']]) A.alpha(ctx, f, () => { for (let i = 0; i < 3; i++) A.ring(ctx, x + ox, e.y0 + oy, 4 + i * 3 + Math.sin(e.t * 6 + i) * 1, i % 2 ? '#ffffff' : col, 10 + i * 3); A.ring(ctx, x + ox, e.y0 + oy, 3, '#05030f', 8); }); },
+        name: 'Wormhole', dmg: 18, cd: 9, mp: 7, kind: 'custom', life: 2.6,
+        desc: 'Open a wormhole under the nearest enemy and another one high above it. In one end, out the other... and down.',
+        spawn(e, g, A) { H.at(e, A, 44, -2); const ax = A.aim(e, 150); if (ax !== null) e.x = ax; e.y0 = H.floor(A, e.x) - 3; e.by = Math.max(H.sky(A, e.x, e.y0 - 20) + 14, e.y0 - 90); e.falls = []; A.sfx('hover'); },
+        update(e, dt, g, A) {
+          for (const o of H.nearby(A, e.x, e.y0, 70)) if (!o.t.tutorial && !o.t._warped) o.t.vx = U.approach(o.t.vx, Math.sign(e.x - o.c.x) * 120, 6, dt);
+          // in through the bottom one...
+          if (e.t > 0.25 && e.t < 2) A.hitR(e, e.x, e.y0, 24 * H.sc(e), { kb: 0, onHit(t) { if (t.applyStatus) t.applyStatus('starstruck', e.potency); A.sfx('orbDash', { minGap: 0.1 }); if (t.tutorial) return; t._warped = true; e.falls.push(t); const nx = e.x - t.box.w / 2, ny = e.by - t.box.h / 2; if (!Phys().overlapsSolid(g.level, nx, ny, t.box.w, t.box.h)) { t.x = nx; t.y = ny; t.vy = 120; } } });
+          // ...out of the top one, and splat
+          for (const t of e.falls) if (!t._landed && (t.onGround || t.dead)) { t._landed = true; if (!t.dead) { A.damage(e, t, 0.8, 0.3); A.puff(e, A.center(t).x, t.box.y + t.box.h, 6, 1.5); A.sfx('crash', { minGap: 0.08 }); } }
+        },
+        onEnd(e) { for (const t of e.falls) { delete t._warped; delete t._landed; } },
+        draw(e, ctx, ox, oy, A) { const f = A.fade(e, 0.2, 0.4); for (const [y, col] of [[e.y0, '#4a6aff'], [e.by, '#ffd34d']]) A.alpha(ctx, f, () => { for (let i = 0; i < 3; i++) A.ring(ctx, e.x + ox, y + oy, 10 + i * 3 + Math.sin(e.t * 6 + i), i % 2 ? '#ffffff' : col, 4 + i * 2); A.ring(ctx, e.x + ox, y + oy, 8, '#05030f', 3); for (let i = 0; i < 6; i++) { const a = e.t * 5 + i * 1.05; A.px(ctx, e.x + ox + Math.cos(a) * 14, y + oy + Math.sin(a) * 5, 1, 1, '#ffd34d'); } }); },
       },
       {
         name: 'Constellation Lion', dmg: 26, cd: 8, mp: 7, kind: 'custom', life: 1.4,
@@ -105,7 +123,7 @@
           draw(e, ctx, ox, oy, A) {
             const dark = e.t < 3.1 ? Math.min(1, e.t * 2) * 0.65 : Math.max(0, 0.65 - (e.t - 3.1) * 1.3);
             A.alpha(ctx, dark, () => A.px(ctx, -10, -10, 2000, 2000, '#05030f'));
-            A.alpha(ctx, Math.min(1, dark * 1.5), () => { for (let i = 0; i < 70; i++) if ((Math.floor(e.t * 3) + i) % 4) A.px(ctx, (i * 97) % 480, (i * 53) % 270, 1, 1, i % 5 ? '#ffffff' : '#ffd34d'); });
+            A.alpha(ctx, Math.min(1, dark * 1.5), () => { for (let i = 0; i < 70; i++) if ((Math.floor(e.t * 3) + i) % 4) A.px(ctx, (i * 97) % view(A).width, (i * 53) % view(A).height, 1, 1, i % 5 ? '#ffffff' : '#ffd34d'); });
             const x = e.cx + ox, top = A.top() + oy, gy = e.gy + oy, open = Math.min(1, e.t / 0.6);
             A.alpha(ctx, Math.min(1, dark * 1.6), () => { A.px(ctx, x - 120 * open, top + 18, 240 * open, 6, '#05030f'); A.px(ctx, x - 120 * open, top + 17, 240 * open, 1, '#9ab8ff'); A.px(ctx, x - 120 * open, top + 24, 240 * open, 1, '#9ab8ff'); NEB(ctx, A, x, top + 46, 40 + open * 50, e.t, 0.85); });
             if (e.t > 1 && e.t < 1.4) { const k = (e.t - 1) / 0.4; A.glow(ctx, x, top + 46, 6 + k * 24, '#ffffff', 0.3 + k * 0.4); }
@@ -121,11 +139,12 @@
   const GLITCHBOX = (ctx, A, x, y, w, h, t) => { for (let i = 0; i < 5; i++) { const yy = y + ((i * 11 + Math.floor(t * 30) * 5) % Math.max(1, h)); A.px(ctx, x + ((i * 7 + Math.floor(t * 20)) % 5) - 2, yy, w, 1, i % 2 ? '#ffffff' : '#000000'); } };
   AW.void = {
     color: '#7a5aff', up: '#ffffff', status: 'erode', fx: 'void', block: ['Hollow Barrier', 'bubble'],
-    icons: ['nullStrike', 'devour', 'realityCut', 'zeroPoint', 'silence'],
+    icons: ['devour', 'realityCut', 'zeroPoint', 'silence', 'glitchSwarm'],
     look: { fx(ctx, F) { if (Math.floor(F.t * 8) % 11 === 0) { const c = F.at('chest'); GLITCHBOX(ctx, F.A, c.x - 6, c.y - 8, 12, 16, F.t); } } },
     idle: {
-      pose: (t) => IDLE.still(t), still: true,
-      back(ctx, F) { const A = F.A, c = F.at('chest'); for (let i = 0; i < 3; i++) { const a = -0.6 + i * 0.6; let lx = c.x - F.d * 2, ly = c.y; for (let s = 0; s < 4; s++) { const nx = lx - F.d * 4, ny = ly + Math.sin(a + s) * 3 - 2; A.line(ctx, lx, ly, nx, ny, s % 2 ? '#ffffff' : '#7a5aff'); lx = nx; ly = ny; } } },
+      // no breathing at all: just a slow, wrong-feeling drift
+      pose: (t) => Object.assign(IDLE.still(t), { lift: 6 + Math.sin(t * 1.1) * 1.4 }), still: true,
+      back(ctx, F) { const A = F.A, c = F.at('chest'); for (let i = 0; i < 3; i++) { const a = -0.6 + i * 0.6, n = 2 + Math.round((Math.sin(F.t * 1.7 + i * 2) + 1) * 1.5); let lx = c.x - F.d * 2, ly = c.y; for (let s = 0; s < n; s++) { const nx = lx - F.d * 4, ny = ly + Math.sin(a + s) * 3 - 2; A.line(ctx, lx, ly, nx, ny, s % 2 ? '#ffffff' : '#7a5aff'); lx = nx; ly = ny; } } },
     },
     run: {
       pose: (ph) => RUN.hover(ph, { lift: 6, lean: 0, arms: [[9.4, 14.6], [9.6, 17.4]], armsB: [[7, 14.6], [7, 17.4]] }),
@@ -134,8 +153,8 @@
     dash: {
       name: 'Null Step', style: 'blink', dmg: 14, life: 0.9,
       spawn(e, g, A) { const p = A.p; e.sx = p.cx; e.y0 = p.y; e.h = p.h; A.sfx('glassCrack'); },
-      update(e, dt, g, A) { const p = A.p; if (p.dashT <= 0 && !e.out) { e.out = true; e.ex = p.cx; A.hit(e, { x: Math.min(e.sx, e.ex) - 4, y: e.y0, w: Math.abs(e.ex - e.sx) + 8, h: e.h }, { kb: 0.5, onHit(t) { if (t.applyStatus) t.applyStatus('erode', 0); } }); } },
-      draw(e, ctx, ox, oy, A) { const ex = e.out ? e.ex : A.p.cx, k = e.t / e.life; A.alpha(ctx, 1 - k, () => { const x0 = Math.min(e.sx, ex) + ox, w = Math.abs(ex - e.sx); A.px(ctx, x0, e.y0 + oy, w, e.h, '#000000'); A.px(ctx, x0, e.y0 + oy - 1, w, 1, '#ffffff'); A.px(ctx, x0, e.y0 + oy + e.h, w, 1, '#ffffff'); GLITCHBOX(ctx, A, x0, e.y0 + oy, w, e.h, e.t); }); },
+      update(e, dt, g, A) { const p = A.p; if (p.dashT <= 0 && !e.out) { e.out = true; e.ex = p.cx; A.hit(e, { x: Math.min(e.sx, e.ex) - 12, y: e.y0, w: Math.abs(e.ex - e.sx) + 24, h: e.h }, { kb: 0.5, onHit(t) { if (t.applyStatus) t.applyStatus('erode', 0); } }); } },
+      draw(e, ctx, ox, oy, A) { const ex = e.out ? e.ex : A.p.cx, k = e.t / e.life; A.alpha(ctx, 1 - k, () => { const x0 = Math.min(e.sx, ex) + ox - (e.out ? 12 : 0), w = Math.abs(ex - e.sx) + (e.out ? 24 : 0); A.px(ctx, x0, e.y0 + oy, w, e.h, '#000000'); A.px(ctx, x0, e.y0 + oy - 1, w, 1, '#ffffff'); A.px(ctx, x0, e.y0 + oy + e.h, w, 1, '#ffffff'); GLITCHBOX(ctx, A, x0, e.y0 + oy, w, e.h, e.t); }); },
     },
     guard: {
       name: 'Hollow Barrier', sound: 'glitch',
@@ -144,10 +163,17 @@
     },
     m1: {
       name: 'Null Strike', dmg: 9, cd: 0.36, kind: 'custom', life: 0.55,
-      desc: 'Punch a hole in reality. The hole hangs there for a moment, then snaps shut and hits again.',
+      desc: 'Punch a hole in reality. The hole hangs there for a moment, then snaps shut and hits everything around it.',
       spawn(e, g, A) { H.at(e, A, 0); e.hx = e.x + e.dir * 20; e.hy = e.y; A.sfx('punchHit', { minGap: 0.04 }); },
-      update(e, dt, g, A) { if (e.t < 0.1) H.melee(e, A, 30 * H.sc(e), 20); if (e.t > 0.4 && !e.snap) { e.snap = true; e.hit.clear(); A.hitR(e, e.hx, e.hy, 9 * H.sc(e), { mult: 0.6, kb: 0.3, onHit(t) { if (t.applyStatus) t.applyStatus('erode', 0); } }); A.sfx('glassCrack', { minGap: 0.04 }); } },
-      draw(e, ctx, ox, oy, A) { const x = e.hx + ox, y = e.hy + oy; if (!e.snap) { const k = Math.min(1, e.t / 0.08); HOLE(ctx, A, x, y, 5 * k * H.sc(e)); return; } const k = (e.t - 0.4) / 0.15; A.alpha(ctx, 1 - k, () => A.ring(ctx, x, y, 2 + k * 8, '#ffffff')); },
+      update(e, dt, g, A) { if (e.t < 0.1) H.melee(e, A, 30 * H.sc(e), 20); if (e.t > 0.4 && !e.snap) { e.snap = true; e.hit.clear(); A.hitR(e, e.hx, e.hy, 16 * H.sc(e), { mult: 0.6, kb: 0.3, onHit(t) { if (t.applyStatus) t.applyStatus('erode', 0); } }); A.spawn(e, W.SHOCK, { x: e.hx, y: e.hy, r: 16 * H.sc(e), dmg: 0, life: 0.25, c: '#7a5aff' }); A.sfx('glassCrack', { minGap: 0.04 }); } },
+      draw(e, ctx, ox, oy, A) {
+        if (e.t < 0.12) W.smear(ctx, A, e.x + ox, e.y + oy, 16 * H.sc(e), e.dir, (e.t / 0.12) * 0.7, '#7a5aff', 3, -1, 1);
+        if (e.snap) return;
+        const x = e.hx + ox, y = e.hy + oy, k = Math.min(1, e.t / 0.08), r = 8 * k * H.sc(e) * (1 + Math.sin(e.t * 40) * 0.08);
+        A.alpha(ctx, 0.3, () => A.ring(ctx, x, y, r + 4, '#7a5aff'));
+        for (let i = 0; i < 8; i++) { const a = -e.t * 9 + i * 0.785, rr = r + 3 + ((e.t * 20 + i) % 4); A.px(ctx, x + Math.cos(a) * rr, y + Math.sin(a) * rr, 1, 1, i % 2 ? '#ffffff' : '#7a5aff'); }
+        HOLE(ctx, A, x, y, r);
+      },
     },
     s: [
       {
@@ -173,7 +199,7 @@
         draw(e, ctx, ox, oy, A) { if (!e.tg) return; const b = e.tg.box, x = e.c.x + ox, y = e.c.y + oy; if (!e.back) { A.px(ctx, b.x + ox - 1, b.y + oy - 1, b.w + 2, b.h + 2, '#000000'); A.alpha(ctx, 0.8, () => { A.ring(ctx, x, y, 8 + Math.sin(e.t * 10) * 2, '#ffffff', 14); GLITCHBOX(ctx, A, b.x + ox, b.y + oy, b.w, b.h, e.t); }); } else { const k = (e.t - 1.4) / 0.4; A.alpha(ctx, 1 - k, () => A.ring(ctx, x, y, 6 + k * 16, '#7a5aff', 6 + k * 16)); } },
       },
       {
-        name: 'Silence Field', dmg: 3, cd: 10, mp: 7, kind: 'custom', life: 4,
+        name: 'Silence Field', dmg: 3, cd: 10, mp: 7, kind: 'custom', life: 4, noGlow: true,
         desc: 'A patch of the world loses all its colour. Inside, enemies slow to a crawl and slowly come apart.',
         spawn(e, g, A) { H.at(e, A, 46); e.gy = H.floor(A, e.x); A.sfx('hover'); },
         update(e, dt, g, A) { const R = 54 * H.sc(e); A.tick(e, { x: e.x - R, y: e.gy - R, w: R * 2, h: R }, 0.4, { kb: 0 }); for (const t of A.targets()) { const c = A.center(t); if (Math.abs(c.x - e.x) < R && !t.tutorial) { t.vx *= 1 - dt * 5; if (t.applyStatus && !t.status.erode) t.applyStatus('erode', 0); } } },
@@ -181,10 +207,11 @@
       },
       {
         name: 'Glitch Swarm', dmg: 5, cd: 8, mp: 6, kind: 'custom', life: 3,
-        desc: 'Release a swarm of black-and-white glitches that crawl over enemies, deleting little bits of them.',
-        spawn(e, g, A) { H.at(e, A, 4, -4); e.bugs = []; for (let i = 0; i < (e.up ? 12 : 8); i++) e.bugs.push({ x: e.x, y: e.y, vx: e.dir * A.rnd(60, 140), vy: A.rnd(-60, 60), st: A.rnd(0, 0.4) }); A.sfx('recordScratch'); },
+        desc: 'Release a swarm of glitches that crawl over enemies deleting little bits of them... then all crash at once.',
+        spawn(e, g, A) { H.at(e, A, 4, -4); e.bugs = []; for (let i = 0; i < (e.up ? 14 : 10); i++) e.bugs.push({ x: e.x, y: e.y, vx: e.dir * A.rnd(60, 140), vy: A.rnd(-60, 60), st: A.rnd(0, 0.4) }); A.sfx('recordScratch'); },
         update(e, dt, g, A) { for (const b of e.bugs) { const t = A.near(b.x, b.y, 200); if (t) { const c = A.center(t); b.vx += (c.x - b.x) * 5 * dt; b.vy += (c.y - b.y) * 5 * dt; } b.vx *= 1 - dt * 1.5; b.vy *= 1 - dt * 1.5; if (Math.random() < dt * 8) { b.x += A.rnd(-4, 4); b.y += A.rnd(-4, 4); } b.x += b.vx * dt; b.y += b.vy * dt; b.st -= dt; if (t && b.st <= 0 && Math.hypot(A.center(t).x - b.x, A.center(t).y - b.y) < 10) { b.st = 0.5; A.damage(e, t, 1, 0); if (t.applyStatus) t.applyStatus('erode', 0); } } },
-        draw(e, ctx, ox, oy, A) { A.alpha(ctx, A.fade(e, 0.1, 0.4), () => { for (const b of e.bugs) { const on = Math.floor((e.t + b.st) * 12) % 2; A.px(ctx, b.x + ox - 1, b.y + oy - 1, 3, 2, on ? '#000000' : '#ffffff'); A.px(ctx, b.x + ox + 2, b.y + oy, 1, 1, '#7a5aff'); } }); },
+        onEnd(e, A) { e.hit.clear(); for (const b of e.bugs) { A.hitR(e, b.x, b.y, 12, { mult: 1.2, kb: 0.3 }); A.spawn(e, W.SHOCK, { x: b.x, y: b.y, r: 10, dmg: 0, life: 0.22, c: '#7a5aff' }); } A.sfx('glassCrack'); A.shake(2, 0.15); },
+        draw(e, ctx, ox, oy, A) { A.alpha(ctx, A.fade(e, 0.1, 0.4), () => { for (const b of e.bugs) { const on = Math.floor((e.t + b.st) * 12) % 2, x = b.x + ox, y = b.y + oy, j = (Math.floor(e.t * 30 + b.st * 10) % 3) - 1; A.px(ctx, x - 3 + j, y - 2, 5, 3, '#ff3a6a'); A.px(ctx, x - 1 - j, y - 1, 5, 3, '#3affea'); A.px(ctx, x - 2, y - 2, 5, 3, on ? '#000000' : '#ffffff'); A.px(ctx, x + 3, y, 2, 1, '#7a5aff'); } }); },
       },
     ],
     ult: {
@@ -204,7 +231,7 @@
             if (e.t < 2.4) {
               e.r = Math.min(70, e.r + dt * 34);
               for (const b of A.g.bolts) if (Math.hypot(b.x - e.cx, b.y - e.cy) < e.r * 2) b.dead = true;
-              for (const t of e.ts) if (!t.dead && !t.tutorial) { const c = A.center(t); t.vx = (e.cx - c.x) * 2; t.vy = (e.cy - c.y) * 2; }
+              for (const t of e.ts) if (!t.dead && !t.tutorial) { const c = A.center(t); t.vx = U.clamp((e.cx - c.x) * 3, -160, 160); floatV(t, U.clamp((e.cy - c.y) * 3, -160, 160), dt); }
               A.tickR(e, e.cx, e.cy, e.r + 10, 0.2, { mult: 0.5, kb: 0, onHit(t) { if (t.applyStatus) t.applyStatus('erode', e.potency); } });
               if (Math.random() < dt * 30) { const a = Math.random() * Math.PI * 2, d = e.r * 2.6; e.bits.push({ x: e.cx + Math.cos(a) * d, y: e.cy + Math.sin(a) * d, t: 0 }); }
             } else if (e.t < 2.7) e.r = Math.max(2, e.r - dt * 220);
@@ -229,10 +256,19 @@
 
   // ============================================================= PSYCHIC (rose)
   const RIP = (ctx, A, x, y, r, col) => { A.ring(ctx, x, y, r, col, r * 0.7); A.ring(ctx, x, y, r * 0.6, col, r * 0.42); };
+  // a giant psychic fist punching towards d, knuckles at (x, y)
+  const FIST = (ctx, A, x, y, d) => {
+    const R = (lx, ly, w, h, c) => A.px(ctx, d > 0 ? x + lx : x - lx - w, y + ly, w, h, c);
+    R(-28, -6, 12, 12, '#c84a9a');
+    R(-18, -9, 16, 18, '#ff6ac8');
+    for (let j = 0; j < 4; j++) { R(-4, -9 + j * 4.5, 5, 4, '#ff8ad8'); R(0, -9 + j * 4.5, 1, 4, '#ffc8e8'); }
+    R(-14, -12, 8, 4, '#ff8ad8');
+    R(-18, -9, 16, 1, '#ffffff');
+  };
   const EYE = (ctx, A, x, y, s, t, col) => { for (let yy = -s; yy <= s; yy++) { const w = Math.round(s * 2 * Math.sqrt(Math.max(0, 1 - (yy * yy) / (s * s)))); A.px(ctx, x - w, y + yy, w * 2, 1, '#f8e8f0'); } A.disc(ctx, x + Math.sin(t * 2) * s * 0.4, y, Math.max(1, Math.round(s * 0.6)), col, '#ffffff'); A.disc(ctx, x + Math.sin(t * 2) * s * 0.4, y, Math.max(1, Math.round(s * 0.25)), '#05030a'); };
   AW.psychic = {
     color: '#ff6ac8', up: '#7affff', status: 'confuse', fx: 'ripples', block: ['Mind Shield', 'shield'],
-    icons: ['psiPalm', 'mindCrush', 'spiral', 'precog', 'astral'],
+    icons: ['mindCrush', 'hypno', 'precog', 'astral', 'neuralStorm'],
     look: { fx(ctx, F) { const h = F.at('headTop'), r = (F.t * 1.2) % 1; F.A.alpha(ctx, 0.6 * (1 - r), () => F.A.ring(ctx, h.x, h.y + 3, 3 + r * 8, '#ff6ac8', 2 + r * 4)); } },
     idle: {
       pose: (t) => IDLE.temple(t, { lift: 3 }),
@@ -254,31 +290,68 @@
     },
     m1: {
       name: 'Psi Palm', dmg: 9, cd: 0.36, kind: 'custom', life: 0.35,
-      desc: 'Thrust your palm: an invisible force slams into whatever is in front of you.',
+      desc: 'Thrust your palm: a wave of psychic force slams into whatever is in front of you.',
       spawn(e, g, A) { A.sfx('whoosh', { minGap: 0.04 }); },
-      update(e, dt, g, A) { H.at(e, A, 0); H.melee(e, A, 34 * H.sc(e), 24, { kb: 1.6 }); },
-      draw(e, ctx, ox, oy, A) { const k = e.t / e.life, x = e.x + ox + e.dir * (8 + 22 * k), y = e.y + oy; A.alpha(ctx, 1 - k, () => { A.arc(ctx, x, y, 6 + k * 6, e.dir, '#ff6ac8', 1, -1.1, 1.1); A.arc(ctx, x - e.dir * 4, y, 4 + k * 4, e.dir, '#ffffff', 1, -1, 1); }); },
+      update(e, dt, g, A) { H.at(e, A, 0); H.melee(e, A, 36 * H.sc(e), 26, { kb: 1.6 }); },
+      draw(e, ctx, ox, oy, A) {
+        const k = e.t / e.life, d = e.dir, x = e.x + ox + d * (8 + 26 * k), y = e.y + oy;
+        A.alpha(ctx, 1 - k, () => {
+          A.alpha(ctx, 0.25, () => A.disc(ctx, x - d * 4, y, Math.round(8 + k * 6), '#ff6ac8'));
+          for (let i = 0; i < 3; i++) { const r = 6 + k * 10 - i * 3; if (r > 1) A.arc(ctx, x - d * i * 5, y, r, d, i === 0 ? '#ffffff' : '#ff6ac8', i === 0 ? 2 : 3, -1.2, 1.2); }
+          for (let i = 0; i < 4; i++) A.px(ctx, x - d * (10 + i * 5) - (d > 0 ? 4 : 0), y - 6 + i * 4, 4, 1, '#ffc8f0');
+        });
+      },
     },
     s: [
       {
         name: 'Mind Crush', dmg: 9, cd: 7, mp: 6, kind: 'custom', life: 1.4,
-        desc: 'Seize the nearest enemy with your mind and squeeze, harder and harder, until it pops.',
+        desc: 'Seize the nearest enemy with two giant psychic hands and squeeze, harder and harder, until it pops and blasts everything near it.',
         spawn(e, g, A) { const t = A.near(A.p.cx, A.p.y, 170); e.tg = t; if (!t) { e.dead = true; return; } holdStun(t, 1.3); A.sfx('hover'); },
-        update(e, dt, g, A) { if (!e.tg || e.tg.dead) { e.dead = true; return; } e.ct = (e.ct || 0) - dt; if (e.t < 1 && e.ct <= 0) { e.ct = 0.2; A.damage(e, e.tg, 0.6, 0); } if (e.t > 1.05 && !e.pop) { e.pop = true; A.damage(e, e.tg, 2.5, 0.8); A.sfx('crash'); A.shake(3, 0.2); } },
-        draw(e, ctx, ox, oy, A) { if (!e.tg) return; const c = A.center(e.tg), x = c.x + ox, y = c.y + oy, sq = Math.min(1, e.t / 1); if (!e.pop) { for (const s of [-1, 1]) { const hx = x + s * (14 - sq * 8); for (let f = 0; f < 4; f++) A.px(ctx, hx - (s > 0 ? 0 : 2), y - 6 + f * 3, 3, 2, '#ff6ac8'); } A.alpha(ctx, 0.5, () => RIP(ctx, A, x, y, 12 - sq * 6, '#ff6ac8')); } else { const k = (e.t - 1.05) / 0.35; A.alpha(ctx, 1 - k, () => RIP(ctx, A, x, y, 4 + k * 20, '#ffffff')); } },
+        update(e, dt, g, A) { if (!e.tg || e.tg.dead) { e.dead = true; return; } e.ct = (e.ct || 0) - dt; if (e.t < 1 && e.ct <= 0) { e.ct = 0.2; A.damage(e, e.tg, 0.6, 0); } if (e.t > 1.05 && !e.pop) { e.pop = true; const c = A.center(e.tg); A.damage(e, e.tg, 2.5, 0.8); W.boom(A, e, c.x, c.y, 30 * H.sc(e), { mult: 1.2 }); A.sfx('crash'); } },
+        draw(e, ctx, ox, oy, A) {
+          if (!e.tg) return;
+          const c = A.center(e.tg), x = c.x + ox, y = c.y + oy, sq = Math.min(1, e.t / 1);
+          if (e.pop) { const k = (e.t - 1.05) / 0.35; A.alpha(ctx, 1 - k, () => RIP(ctx, A, x, y, 4 + k * 26, '#ffffff')); return; }
+          A.alpha(ctx, 0.25 + sq * 0.2, () => A.disc(ctx, x, y, Math.round(12 - sq * 4), '#ff6ac8'));
+          for (const s of [-1, 1]) {
+            const hx = x + s * (22 - sq * 12) + Math.sin(e.t * 40) * sq;
+            A.alpha(ctx, 0.35, () => A.disc(ctx, hx, y, 8, '#ff6ac8'));
+            A.px(ctx, hx - 2, y - 7, 5, 14, '#ff6ac8'); A.px(ctx, hx - 2, y - 7, 5, 1, '#ffffff');
+            for (let f = 0; f < 4; f++) A.px(ctx, s > 0 ? hx - 6 : hx + 3, y - 6 + f * 4, 4, 2, '#ffc8f0');
+          }
+          A.alpha(ctx, 0.6, () => RIP(ctx, A, x, y, 14 - sq * 7, '#ff6ac8'));
+        },
       },
       {
         name: 'Hypnotic Spiral', dmg: 14, cd: 8, mp: 6, kind: 'custom', life: 1.6,
-        desc: 'A hypnotic spiral spins in front of you. Enemies stare into it, wander towards you, confused, and get blasted.',
+        desc: 'A big hypnotic spiral spins in front of you. Enemies stare into it, wander towards you, confused, and get blasted.',
         spawn(e, g, A) { H.at(e, A, 24, -4); A.sfx('hover'); },
-        update(e, dt, g, A) { H.at(e, A, 24, -4); const R = 90 * H.sc(e); for (const o of H.nearby(A, e.x, e.y, R)) if ((o.c.x - e.x) * e.dir > -10) { if (!o.t.tutorial) o.t.vx = U.approach(o.t.vx, -e.dir * 40, 3, dt); if (o.t.applyStatus && !o.t.status.confuse) o.t.applyStatus('confuse', e.potency); } if (e.t > 1.2 && !e.blast) { e.blast = true; A.hitR(e, e.x, e.y, 30 * H.sc(e), { kb: 1.6 }); A.sfx('shockwave'); } },
-        draw(e, ctx, ox, oy, A) { const x = e.x + ox, y = e.y + oy, f = A.fade(e, 0.1, 0.3); A.alpha(ctx, f, () => { for (let i = 0; i < 60; i++) { const q = i / 60, a = -e.t * 8 + q * 14, r = q * 14; A.px(ctx, x + Math.cos(a) * r, y + Math.sin(a) * r, 1, 1, i % 2 ? '#ff6ac8' : '#ffffff'); } if (e.blast) A.alpha(ctx, 1 - (e.t - 1.2) / 0.4, () => RIP(ctx, A, x, y, 4 + (e.t - 1.2) * 70, '#ff6ac8')); }); },
+        update(e, dt, g, A) { H.at(e, A, 24, -4); const R = 90 * H.sc(e); for (const o of H.nearby(A, e.x, e.y, R)) if ((o.c.x - e.x) * e.dir > -10) { if (!o.t.tutorial) o.t.vx = U.approach(o.t.vx, -e.dir * 40, 3, dt); if (o.t.applyStatus && !o.t.status.confuse) o.t.applyStatus('confuse', e.potency); } if (e.t > 1.2 && !e.blast) { e.blast = true; W.boom(A, e, e.x, e.y, 34 * H.sc(e)); A.sfx('shockwave'); } },
+        draw(e, ctx, ox, oy, A) {
+          const x = e.x + ox, y = e.y + oy, f = A.fade(e, 0.1, 0.3), R = 22 * H.sc(e);
+          A.alpha(ctx, f, () => {
+            A.alpha(ctx, 0.2, () => A.disc(ctx, x, y, Math.round(R + 2), '#ff6ac8'));
+            for (let arm = 0; arm < 2; arm++) for (let i = 0; i < 70; i++) { const q = i / 70, a = -e.t * 8 + q * 14 + arm * Math.PI, r = q * R; A.px(ctx, x + Math.cos(a) * r, y + Math.sin(a) * r, 2, 2, (i + arm) % 2 ? '#ff6ac8' : '#ffffff'); }
+            if (e.blast) A.alpha(ctx, 1 - (e.t - 1.2) / 0.4, () => RIP(ctx, A, x, y, 4 + (e.t - 1.2) * 70, '#ff6ac8'));
+          });
+        },
       },
       {
         name: 'Precognition', dmg: 20, cd: 14, mp: 6, kind: 'custom', life: 4,
-        desc: 'See a few seconds into the future. The next attack aimed at you simply misses, and you counter it.',
-        spawn(e, g, A) { const p = A.p; e.armed = true; e.hp0 = p.hp; p.dashGrace = 0; A.g.floatText(p.cx, p.y - 10, 'I SAW THAT COMING', e.pal.l); A.sfx('star'); },
-        update(e, dt, g, A) { const p = A.p; e.x = p.cx; e.y = p.y; if (!e.armed) return; p.dashGrace = Math.max(p.dashGrace, 0.05); const near = A.near(p.cx, p.y + 10, 22); if (near) { e.armed = false; e.ct = e.t; A.damage(e, near, 1, 1.4); A.g.floatText(p.cx, p.y - 14, 'COUNTER!', '#ffffff'); A.sfx('punchHit'); A.flash(0.1); } },
+        desc: 'See a few seconds into the future. The next attack aimed at you simply misses, and you appear behind the attacker to counter.',
+        spawn(e, g, A) { const p = A.p; e.armed = true; A.g.floatText(p.cx, p.y - 10, 'FORESIGHT', e.pal.l); A.sfx('star'); },
+        update(e, dt, g, A) {
+          const p = A.p; e.x = p.cx; e.y = p.y; if (!e.armed) return;
+          p.dashGrace = Math.max(p.dashGrace, 0.05);
+          // a shot about to hit you, or someone close enough to swing
+          const bolt = A.g.bolts.find((b) => !b.dead && Math.abs(b.x - p.cx) < 18 && Math.abs(b.y - (p.y + 10)) < 16), near = A.near(p.cx, p.y + 10, 26);
+          if (!bolt && !near) return;
+          if (bolt) bolt.dead = true;
+          e.armed = false; e.ct = e.t;
+          const tg = near || A.near(p.cx, p.y + 10, 200);
+          if (tg) { const c = A.center(tg), side = c.x > p.cx ? 1 : -1, nx = c.x + side * 14 - p.w / 2; if (!Phys().overlapsSolid(g.level, nx, p.y, p.w, p.h)) { p.x = nx; p.facing = -side; } A.damage(e, tg, 1, 1.4); if (tg.applyStatus) tg.applyStatus('confuse', e.potency); }
+          A.g.floatText(p.cx, p.y - 14, 'SAW THAT COMING', '#ffffff'); A.sfx('punchHit'); A.flash(0.1);
+        },
         draw(e, ctx, ox, oy, A) { const x = e.x + ox, y = e.y + oy; if (e.armed) { A.alpha(ctx, 0.4 + 0.2 * Math.sin(e.t * 8), () => H.drawGhost(ctx, A, 'idle', x + Math.sin(e.t * 3) * 3, A.p.feet + oy, A.p.facing, '#ff6ac8')); EYE(ctx, A, x, y - 8, 2, e.t, '#ff6ac8'); } else if (e.t - e.ct < 0.4) A.alpha(ctx, 1 - (e.t - e.ct) / 0.4, () => RIP(ctx, A, x, y + 10, 6 + (e.t - e.ct) * 40, '#ffffff')); },
       },
       {
@@ -310,7 +383,7 @@
           life: 4, layer: 'screen',
           spawn(e) { e.ts = H.nearby(A, p.cx, p.y, 340).map((o) => o.t); for (const t of e.ts) holdStun(t, 3.4); e.fists = []; e.ft = 0; A.sfx('hover'); A.sfx('surge'); },
           update(e, dt, g, A) {
-            for (const t of e.ts) if (!t.dead && !t.tutorial) { if (e.t < 0.8) { t.vy = -100; t.vx = 0; } else if (e.t < 3) { t.vy = Math.sin(e.t * 3 + t.uid) * 20; t.vx = 0; } }
+            for (const t of e.ts) if (!t.dead && !t.tutorial) { if (e.t < 0.8) { floatV(t, -90, dt); t.vx = 0; } else if (e.t < 3) { floatV(t, Math.sin(e.t * 3 + t.uid) * 14, dt); t.vx = 0; } }
             e.ft -= dt; for (const f of e.fists) f.t += dt;
             if (e.t > 0.9 && e.t < 2.9 && e.ft <= 0) { e.ft = 0.12; const live = e.ts.filter((t) => !t.dead), t = live[Math.floor(Math.random() * Math.max(1, live.length))]; if (t) { const c = A.center(t); A.damage(e, t, 0.7, 0); e.fists.push({ x: c.x, y: c.y, s: Math.random() < 0.5 ? 1 : -1, t: 0, eye: Math.random() < 0.3 }); A.sfx('punchHit', { minGap: 0.04 }); } }
             if (e.t > 3 && !e.boom) { e.boom = true; for (const t of e.ts) if (!t.dead) A.damage(e, t, 5, 1.2); A.sfx('boom'); A.flash(0.6); A.shake(12, 0.6); }
@@ -320,9 +393,10 @@
             if (dim > 0) {
               A.alpha(ctx, dim * 0.85, () => A.px(ctx, -10, -10, 2000, 2000, '#2a0a2a'));
               // the psychic dimension: rings, eyes and shapes in every direction
-              A.alpha(ctx, dim, () => { const cx = 240, cy = 135; for (let i = 0; i < 6; i++) { const r = ((e.t * 60 + i * 40) % 240); A.ring(ctx, cx, cy, r, i % 2 ? '#ff6ac8' : '#7affff', r * 0.6, 3); } for (let i = 0; i < 5; i++) EYE(ctx, A, 40 + i * 100, 40 + (i % 2) * 180, 6, e.t + i, '#ff6ac8'); });
+              A.alpha(ctx, dim, () => { const V = view(A), cx = V.width / 2, cy = V.height / 2; for (let i = 0; i < 6; i++) { const r = ((e.t * 60 + i * 40) % (V.width / 2)); A.ring(ctx, cx, cy, r, i % 2 ? '#ff6ac8' : '#7affff', r * 0.6, 3); } for (let i = 0; i < 5; i++) EYE(ctx, A, (V.width * (i + 0.5)) / 5, i % 2 ? V.height - 50 : 40, 6, e.t + i, '#ff6ac8'); });
             }
-            for (const f of e.fists) if (f.t < 0.2) A.alpha(ctx, 1 - f.t / 0.2, () => { const x = f.x + ox, y = f.y + oy; if (f.eye) EYE(ctx, A, x, y - 14, 5, e.t, '#7affff'); else { A.px(ctx, x + f.s * (16 - f.t * 60) - 6, y - 6, 12, 12, '#ff6ac8'); A.px(ctx, x + f.s * (16 - f.t * 60) - 6, y - 6, 12, 2, '#ffffff'); } RIP(ctx, A, x, y, 6 + f.t * 30, '#ffffff'); });
+            // the manifestations: giant fists flying in from the dark, and huge staring eyes
+            for (const f of e.fists) if (f.t < 0.32) A.alpha(ctx, f.t < 0.12 ? 1 : 1 - (f.t - 0.12) / 0.2, () => { const x = f.x + ox, y = f.y + oy, k = W.easeIn(Math.min(1, f.t / 0.1)); if (f.eye) { EYE(ctx, A, x, y - 26, 7, e.t, '#7affff'); if (f.t > 0.06) A.line(ctx, x, y - 22, x, y, '#7affff', 2); } else FIST(ctx, A, x + f.s * (6 + 50 * (1 - k)), y, -f.s); if (f.t > 0.1) RIP(ctx, A, x, y, 4 + (f.t - 0.1) * 70, '#ffffff'); });
             for (const t of e.ts) if (!t.dead && e.t < 3) { const c = A.center(t); A.alpha(ctx, 0.6, () => RIP(ctx, A, c.x + ox, c.y + oy, 10 + Math.sin(e.t * 9) * 2, '#ff6ac8')); }
             if (e.boom) { const k = (e.t - 3) / 1; A.alpha(ctx, 1 - k, () => RIP(ctx, A, p.cx + ox, p.y + oy, 20 + k * 240, '#ffffff')); }
           },
@@ -337,7 +411,7 @@
   const SHARD = (b, ctx, ox, oy, A) => { const x = b.x + ox, y = b.y + oy, a = Math.atan2(b.vy, b.vx), c = Math.cos(a), s = Math.sin(a); A.line(ctx, x - c * 4, y - s * 4, x + c * 3, y + s * 3, b.col || '#c8a0ff', 2); A.px(ctx, x + c * 3, y + s * 3, 1, 1, '#ffffff'); };
   AW.crystal = {
     color: '#c8a0ff', up: '#7af0e0', status: 'crystallize', fx: 'glints', block: ['Diamond Facet', 'wall'],
-    icons: ['gemEdge', 'garden', 'golem2', 'prismCage', 'kaleido'],
+    icons: ['garden', 'gemGolem', 'prismCage', 'kaleido', 'embrace'],
     look: { fx(ctx, F) { const c = F.at('cheek'); F.A.px(ctx, c.x - F.d, c.y, 1, 1, RAINBOW[Math.floor(F.t * 6) % 6]); for (let i = 0; i < 3; i++) { const a = F.t * 1.8 + i * 2.1; GEM(ctx, F.A, F.x + Math.cos(a) * 12, F.y - 8 + Math.sin(a) * 5, 3, 5, '#c8a0ff', false); } } },
     idle: { pose: (t) => IDLE.hip(t) },
     run: {
@@ -347,8 +421,8 @@
     dash: {
       name: 'Prism Shift', dmg: 12, life: 1.3,
       spawn(e) { e.cl = []; },
-      update(e, dt, g, A) { const p = A.p; if (p.dashT > 0) { e.ct = (e.ct || 0) - dt; if (e.ct <= 0 && e.cl.length < 3) { e.ct = 0.05; e.cl.push({ x: p.cx, f: p.feet, d: p.facing }); } } else if (!e.lit && e.cl.length > 1) { e.lit = true; e.lt = e.t; } if (e.lit && e.t - e.lt < 0.5) for (let i = 0; i < e.cl.length - 1; i++) { const a = e.cl[i], b = e.cl[i + 1]; A.tick(e, { x: Math.min(a.x, b.x), y: a.f - 16, w: Math.abs(b.x - a.x) + 2, h: 8 }, 0.25, { kb: 0.5 }); } },
-      draw(e, ctx, ox, oy, A) { const f = A.fade(e, 0.02, 0.4); A.alpha(ctx, f, () => { for (const c of e.cl) A.alpha(ctx, 0.6, () => H.drawGhost(ctx, A, 'dash', c.x + ox, c.f + oy, c.d, '#c8a0ff')); if (e.lit) for (let i = 0; i < e.cl.length - 1; i++) { const a = e.cl[i], b = e.cl[i + 1]; for (let j = 0; j < 3; j++) A.line(ctx, a.x + ox, a.f + oy - 12 + j, b.x + ox, b.f + oy - 12 + j, RAINBOW[(j * 2 + i) % 6]); } }); },
+      update(e, dt, g, A) { const p = A.p; if (p.dashT > 0) { e.ct = (e.ct || 0) - dt; if (e.ct <= 0 && e.cl.length < 3) { e.ct = 0.05; e.cl.push({ x: p.cx, f: p.feet, d: p.facing }); } } else if (!e.lit && e.cl.length) { e.lit = true; e.lt = e.t; e.cl.push({ x: p.cx, f: p.feet, d: p.facing, end: true }, { x: p.cx + p.facing * 30, f: p.feet, d: p.facing, ray: true }); A.sfx('glassCrack', { minGap: 0.05 }); } if (e.lit && e.t - e.lt < 0.5) for (let i = 0; i < e.cl.length - 1; i++) { const a = e.cl[i], b = e.cl[i + 1]; A.tick(e, { x: Math.min(a.x, b.x), y: a.f - 16, w: Math.abs(b.x - a.x) + 2, h: 8 }, 0.25, { kb: 0.5 }); } },
+      draw(e, ctx, ox, oy, A) { const f = A.fade(e, 0.02, 0.4); A.alpha(ctx, f, () => { for (const c of e.cl) if (c.ray) continue; else if (c.end) GEM(ctx, A, c.x + ox, c.f + oy - 8, 5, 8, '#c8a0ff', true); else A.alpha(ctx, 0.6, () => H.drawGhost(ctx, A, 'dash', c.x + ox, c.f + oy, c.d, '#c8a0ff')); if (e.lit) for (let i = 0; i < e.cl.length - 1; i++) { const a = e.cl[i], b = e.cl[i + 1]; for (let j = 0; j < 3; j++) A.line(ctx, a.x + ox, a.f + oy - 12 + j, b.x + ox, b.f + oy - 12 + j, RAINBOW[(j * 2 + i) % 6]); } }); },
     },
     guard: {
       name: 'Diamond Facet', sound: 'glass',
@@ -372,10 +446,29 @@
       },
       {
         name: 'Gem Golem', dmg: 14, cd: 12, mp: 8, kind: 'custom', life: 6,
-        desc: 'A small golem of crystal clatters out of the ground and punches anything near you.',
-        spawn(e, g, A) { const p = A.p; e.x = p.cx + p.facing * 16; e.gy = p.feet; e.d = p.facing; e.at = 0.6; A.sfx('glassCrack'); },
-        update(e, dt, g, A) { const t = A.near(e.x, e.gy - 10, 170); e.at -= dt; e.punch = Math.max(0, (e.punch || 0) - dt); if (t) { const c = A.center(t), dx = c.x - e.x; e.d = Math.sign(dx) || e.d; if (Math.abs(dx) > 14) { const nx = e.x + e.d * 55 * dt; if (!A.solid(nx + e.d * 6, e.gy - 6)) { e.x = nx; e.gy = A.ground(e.x, e.gy - 14); } e.walk = (e.walk || 0) + dt; } else if (e.at <= 0) { e.at = e.up ? 0.6 : 0.85; e.punch = 0.18; A.damage(e, t, 1, 1); A.sfx('glassCrack', { minGap: 0.05 }); } } },
-        draw(e, ctx, ox, oy, A) { const x = e.x + ox, gy = e.gy + oy, step = Math.floor((e.walk || 0) * 8) % 2, f = A.fade(e, 0.2, 0.4), rise = Math.min(1, e.t / 0.3); A.alpha(ctx, f, () => { ctx.save(); ctx.beginPath(); ctx.rect(x - 14, gy - 28, 28, 28); ctx.clip(); const y = gy + (1 - rise) * 20; A.px(ctx, x - 4 + step, y - 5, 3, 5, '#a880e0'); A.px(ctx, x + 1 - step, y - 5, 3, 5, '#a880e0'); GEM(ctx, A, x, y - 4, 12, 14, '#c8a0ff', false); A.px(ctx, x - 2, y - 14, 1, 1, '#ffffff'); A.px(ctx, x + 1, y - 14, 1, 1, '#ffffff'); const arm = e.punch ? 6 : 0; A.px(ctx, x + e.d * (6 + arm), y - 11, 4, 4, '#e8d8ff'); ctx.restore(); }); },
+        desc: 'A big golem of crystal clatters out of the ground and smashes anything near you. When it crumbles, it bursts.',
+        spawn(e, g, A) { const p = A.p; e.x = p.cx + p.facing * 16; e.gy = p.feet; e.d = p.facing; e.at = 0.6; A.sfx('glassCrack'); A.g.dust(e.x, e.gy, 6); },
+        update(e, dt, g, A) {
+          const t = A.near(e.x, e.gy - 14, 170); e.at -= dt; e.punch = Math.max(0, (e.punch || 0) - dt);
+          if (!t) return;
+          const c = A.center(t), dx = c.x - e.x; e.d = Math.sign(dx) || e.d;
+          if (Math.abs(dx) > 18) { const nx = e.x + e.d * 70 * dt; if (!A.solid(nx + e.d * 8, e.gy - 6)) { e.x = nx; e.gy = A.ground(e.x, e.gy - 14); } e.walk = (e.walk || 0) + dt; }
+          else if (e.at <= 0) { e.at = e.up ? 0.6 : 0.85; e.punch = 0.18; A.damage(e, t, 1, 1); A.blast(e, c.x, c.y, 16 * H.sc(e), { dmg: e.dmg * 0.5 }); A.spawn(e, W.SHOCK, { x: c.x, y: c.y, r: 16, dmg: 0, life: 0.25 }); A.sfx('glassCrack', { minGap: 0.05 }); }
+        },
+        onEnd(e, A) { W.boom(A, e, e.x, e.gy - 12, 30 * H.sc(e), { mult: 1.5 }); W.debris(A, e.x, e.gy - 12, 12, ['#c8a0ff', '#e8d8ff', '#ffffff'], 150); },
+        draw(e, ctx, ox, oy, A) {
+          const x = e.x + ox, gy = e.gy + oy, step = Math.floor((e.walk || 0) * 8) % 2, f = A.fade(e, 0.2, 0.4), rise = Math.min(1, e.t / 0.3), d = e.d;
+          A.alpha(ctx, f, () => {
+            ctx.save(); ctx.beginPath(); ctx.rect(x - 26, gy - 46, 52, 46); ctx.clip();
+            const y = gy + (1 - rise) * 34, arm = e.punch ? 10 : 0;
+            A.px(ctx, x - 7 + step, y - 8, 5, 8, '#a880e0'); A.px(ctx, x + 2 - step, y - 8, 5, 8, '#a880e0');
+            GEM(ctx, A, x, y - 7, 20, 24, '#c8a0ff', false);
+            A.px(ctx, x - 3, y - 24, 2, 2, '#ffffff'); A.px(ctx, x + 2, y - 24, 2, 2, '#ffffff');
+            A.px(ctx, d > 0 ? x + 8 + arm : x - 15 - arm, y - 19, 7, 7, '#e8d8ff'); A.px(ctx, d > 0 ? x + 8 + arm : x - 15 - arm, y - 19, 7, 1, '#ffffff');
+            A.px(ctx, d > 0 ? x - 13 : x + 8, y - 17, 5, 6, '#c8a0ff');
+            ctx.restore();
+          });
+        },
       },
       {
         name: 'Prism Cage', dmg: 6, cd: 9, mp: 7, kind: 'custom', life: 1.6,
@@ -386,9 +479,9 @@
       },
       {
         name: 'Kaleidoscope', dmg: 7, cd: 6, mp: 6, kind: 'custom', life: 0.5,
-        desc: 'Blast a cone of rainbow crystal shards that splits and spins like a kaleidoscope.',
-        spawn(e, g, A) { H.at(e, A, 6, -2); A.sfx('shatter'); const n = e.up ? 14 : 10; for (let i = 0; i < n; i++) { const a = U.lerp(-0.5, 0.5, i / (n - 1)); A.spawn(e, H.proj(SHARD, { life: 0.55, r: 3, tick(b, dt) { b.vy += Math.sin(b.t * 20 + b.ph) * 300 * dt; } }), { vx: Math.cos(a) * 280 * e.dir, vy: Math.sin(a) * 280, col: RAINBOW[i % 6], ph: i }); } },
-        draw(e, ctx, ox, oy, A) { const k = e.t / e.life; A.alpha(ctx, 1 - k, () => { for (let i = 0; i < 6; i++) { const a = i * 1.047 + e.t * 6; A.line(ctx, e.x + ox, e.y + oy, e.x + ox + Math.cos(a) * 8, e.y + oy + Math.sin(a) * 8, RAINBOW[i]); } }); },
+        desc: 'Blast a wide cone of rainbow crystal shards that splits and spins like a kaleidoscope.',
+        spawn(e, g, A) { H.at(e, A, 6, -2); A.sfx('shatter'); const n = e.up ? 18 : 14; for (let i = 0; i < n; i++) { const a = U.lerp(-0.6, 0.6, i / (n - 1)); A.spawn(e, H.proj((b, ctx, ox, oy, A) => { A.alpha(ctx, 0.35, () => A.disc(ctx, b.x + ox, b.y + oy, 3, b.col)); SHARD(b, ctx, ox, oy, A); }, { life: 0.55, r: 4, tick(b, dt) { b.vy += Math.sin(b.t * 20 + b.ph) * 300 * dt; }, onHit(b, A) { A.spawn(b, W.SHOCK, { x: b.x, y: b.y, r: 8, dmg: 0, life: 0.2, c: b.col }); } }), { vx: Math.cos(a) * 290 * e.dir, vy: Math.sin(a) * 290, col: RAINBOW[i % 6], ph: i }); } },
+        draw(e, ctx, ox, oy, A) { const k = e.t / e.life, x = e.x + ox, y = e.y + oy; A.alpha(ctx, 1 - k, () => { for (let i = 0; i < 12; i++) { const a = i * 0.524 + e.t * 6, L = 10 + k * 14; A.line(ctx, x + Math.cos(a) * 3, y + Math.sin(a) * 3, x + Math.cos(a) * L, y + Math.sin(a) * L, RAINBOW[i % 6], i % 2 ? 1 : 2); } A.ring(ctx, x, y, 6 + k * 12, '#ffffff'); }); },
       },
       {
         name: 'Crystal Embrace', dmg: 16, cd: 8, mp: 6, kind: 'custom', life: 1.4,
@@ -410,17 +503,17 @@
         const p = A.p;
         A.spawn(e0, {
           life: 3.8,
-          spawn(e) { e.ts = H.nearby(A, p.cx, p.y, 340).map((o) => o.t); e.sp = []; for (let i = 0; i < 16; i++) { const x = p.cx + (i - 7.5) * 30 + A.rnd(-8, 8); e.sp.push({ x, gy: A.ground(x, p.y + 2), h: A.rnd(30, 70), d: 0.1 + Math.abs(i - 7.5) * 0.04, c: RAINBOW[i % 6] }); } e.beams = []; e.bt = 0; A.sfx('glassCrack'); A.sfx('rumble', { dur: 2.6 }); },
+          spawn(e) { e.ts = H.nearby(A, p.cx, p.y, 340).map((o) => o.t); e.sp = []; for (let i = 0; i < 16; i++) { const x = p.cx + (i - 7.5) * 30 + A.rnd(-8, 8); e.sp.push({ x, gy: A.ground(x, p.y + 2), h: A.rnd(50, 120), d: 0.1 + Math.abs(i - 7.5) * 0.04, c: RAINBOW[i % 6] }); } e.beams = []; e.bt = 0; A.sfx('glassCrack'); A.sfx('rumble', { dur: 2.6 }); },
           update(e, dt, g, A) {
             e.bt -= dt; for (const b of e.beams) b.t += dt;
-            for (const s of e.sp) if (!s.hit && e.t > s.d + 0.1) { s.hit = true; A.hit(e, { x: s.x - 8, y: s.gy - s.h, w: 16, h: s.h }, { mult: 0.8, kb: 0, onHit(t) { if (t.applyStatus) t.applyStatus('launch', 0); } }); e.hit.clear(); }
+            for (const s of e.sp) if (!s.hit && e.t > s.d + 0.1) { s.hit = true; A.hit(e, { x: s.x - 11, y: s.gy - s.h, w: 22, h: s.h }, { mult: 0.8, kb: 0, onHit(t) { if (t.applyStatus) t.applyStatus('launch', 0); } }); e.hit.clear(); A.sfx('glassCrack', { minGap: 0.05 }); }
             if (e.t > 0.8 && e.t < 2.8 && e.bt <= 0) { e.bt = 0.06; const a = e.sp[Math.floor(Math.random() * e.sp.length)], b = e.sp[Math.floor(Math.random() * e.sp.length)]; e.beams.push({ x0: a.x, y0: a.gy - a.h * 0.8, x1: b.x, y1: b.gy - b.h * 0.8, c: RAINBOW[Math.floor(Math.random() * 6)], t: 0 }); for (const t of e.ts) if (!t.dead) { const c = A.center(t); if (c.x > Math.min(a.x, b.x) && c.x < Math.max(a.x, b.x) && Math.random() < 0.5) A.damage(e, t, 0.4, 0); } A.sfx('zap', { minGap: 0.05 }); }
-            if (e.t > 3 && !e.boom) { e.boom = true; for (const t of e.ts) if (!t.dead) A.damage(e, t, 6, 1.2); A.sfx('shatter'); A.sfx('boom'); A.flash(0.6); A.shake(12, 0.6); for (const s of e.sp) for (let i = 0; i < 3; i++) A.spawn(e, H.proj(SHARD, { life: 0.8, r: 2 }), { x: s.x, y: s.gy - s.h / 2, vx: A.rnd(-200, 200), vy: A.rnd(-260, 0), col: s.c, dmg: e.dmg * 0.2 }); }
+            if (e.t > 3 && !e.boom) { e.boom = true; for (const t of e.ts) if (!t.dead) A.damage(e, t, 6, 1.2); A.sfx('shatter'); A.sfx('boom'); A.flash(0.6); A.shake(12, 0.6); for (const s of e.sp) for (let i = 0; i < 5; i++) A.spawn(e, H.proj(SHARD, { life: 0.8, r: 2 }), { x: s.x, y: s.gy - s.h / 2, vx: A.rnd(-200, 200), vy: A.rnd(-260, 0), col: s.c, dmg: e.dmg * 0.2 }); }
           },
           draw(e, ctx, ox, oy, A) {
-            if (!e.boom) for (const s of e.sp) { const k = U.clamp((e.t - s.d) / 0.15, 0, 1); if (k > 0) GEM(ctx, A, s.x + ox, s.gy + oy, 14, s.h * k, s.c, false); }
-            for (const b of e.beams) if (b.t < 0.12) A.alpha(ctx, 1 - b.t / 0.12, () => { A.line(ctx, b.x0 + ox, b.y0 + oy, b.x1 + ox, b.y1 + oy, b.c, 2); A.line(ctx, b.x0 + ox, b.y0 + oy, b.x1 + ox, b.y1 + oy, '#ffffff'); });
-            if (e.boom) { const k = (e.t - 3) / 0.8; A.alpha(ctx, (1 - k) * 0.4, () => A.px(ctx, -10, -10, 2000, 2000, RAINBOW[Math.floor(e.t * 20) % 6])); }
+            if (!e.boom) for (const s of e.sp) { const k = U.clamp((e.t - s.d) / 0.15, 0, 1); if (k > 0) GEM(ctx, A, s.x + ox, s.gy + oy, 22, s.h * k, s.c, false); }
+            for (const b of e.beams) if (b.t < 0.12) A.alpha(ctx, 1 - b.t / 0.12, () => { A.alpha(ctx, 0.4, () => A.line(ctx, b.x0 + ox, b.y0 + oy, b.x1 + ox, b.y1 + oy, b.c, 9)); A.line(ctx, b.x0 + ox, b.y0 + oy, b.x1 + ox, b.y1 + oy, b.c, 4); A.line(ctx, b.x0 + ox, b.y0 + oy, b.x1 + ox, b.y1 + oy, '#ffffff', 2); });
+            if (e.boom) { const k = (e.t - 3) / 0.8; A.alpha(ctx, (1 - k) * 0.4, () => A.px(ctx, -10, -10, 2000, 2000, RAINBOW[Math.floor(e.t * 20) % 6])); A.alpha(ctx, Math.max(0, 1 - k), () => { for (let i = 0; i < 6; i++) { const r = 20 + k * (280 - i * 30); A.ring(ctx, p.cx + ox, p.feet + oy - 40, r, RAINBOW[i], r * 0.6, 2); } }); }
           },
         }, {});
       },
@@ -432,7 +525,7 @@
   const MOTH = (ctx, A, x, y, t) => { const f = Math.floor(t * 14) % 2; A.px(ctx, x, y, 1, 2, '#c8c8e0'); A.px(ctx, x - 2, y - f, 2, 2, '#e8ecff'); A.px(ctx, x + 1, y - f, 2, 2, '#e8ecff'); A.alpha(ctx, 0.3, () => A.disc(ctx, x, y, 3, '#e0e4ff')); };
   AW.moon = {
     color: '#e0e4ff', up: '#ff6a8a', status: 'sleep', fx: 'moonbeams', block: ['Crescent Aegis', 'shield'],
-    icons: ['moonblade', 'tidePull', 'moths', 'nightDome', 'waltz'],
+    icons: ['tidePull', 'moths', 'nightDome', 'lunarCannon', 'waltz'],
     look: { back(ctx, F) { const h = F.at('headTop'); CRESCENT(ctx, F.A, h.x - F.d * 6, h.y + 4, 9, -F.d, '#c8ccf0', '#ffffff'); } },
     idle: { pose: (t) => IDLE.lazy(t), fx(ctx, F) { if (Math.floor(F.t * 0.5) % 2) { const m = F.at('mouth'); F.A.text(ctx, 'z', m.x + F.d * 6, m.y - 6 - ((F.t * 6) % 8), '#e0e4ff'); } } },
     run: {
@@ -454,17 +547,25 @@
     },
     m1: {
       name: 'Moonblade', dmg: 9, cd: 0.36, kind: 'custom', life: 0.3,
-      desc: 'Silver crescent sword strikes. Every third swing spins all the way around you.',
+      desc: 'Big silver crescent sword strikes. Every third swing spins all the way around you.',
       spawn(e, g, A) { const p = A.p; p._mb = ((p._mb || 0) + 1) % 3; e.n = p._mb; A.sfx('swing', { minGap: 0.04 }); },
-      update(e, dt, g, A) { H.at(e, A, 0); if (e.n === 0) A.hitR(e, e.x, e.y, 28 * H.sc(e), { mult: 1.5, kb: 1 }); else H.melee(e, A, 32 * H.sc(e), 24); },
-      draw(e, ctx, ox, oy, A) { const k = Math.min(1, e.t / 0.14), x = e.x + ox, y = e.y + oy, d = e.dir, f = 1 - Math.max(0, e.t - 0.14) / 0.16; A.alpha(ctx, f, () => { if (e.n === 0) { for (let i = 0; i < 30; i++) { const a = (i / 30) * Math.PI * 2 * k; A.px(ctx, x + Math.cos(a) * 24 * H.sc(e), y + Math.sin(a) * 14, 2, 1, i % 3 ? '#e0e4ff' : '#ffffff'); } } else CRESCENT(ctx, A, x + d * 8, y + (e.n === 1 ? -2 : 2), 14 * H.sc(e) * k + 2, d, '#c8ccf0', '#ffffff', e.n === 1 ? -0.4 : 0.4); }); },
+      update(e, dt, g, A) { H.at(e, A, 0); if (e.n === 0) A.hitR(e, e.x, e.y, 30 * H.sc(e), { mult: 1.5, kb: 1 }); else H.melee(e, A, 34 * H.sc(e), 26); },
+      draw(e, ctx, ox, oy, A) {
+        const k = Math.min(1, e.t / 0.14), x = e.x + ox, y = e.y + oy, d = e.dir, f = 1 - Math.max(0, e.t - 0.14) / 0.16;
+        A.alpha(ctx, f, () => {
+          if (e.n !== 0) { CRESCENT(ctx, A, x + d * 10, y + (e.n === 1 ? -2 : 2), 18 * H.sc(e) * k + 2, d, '#c8ccf0', '#ffffff', e.n === 1 ? -0.4 : 0.4); return; }
+          const R = 26 * H.sc(e);
+          for (let i = 0; i < 40; i++) { const q = i / 40; if (q > k) break; const a = q * Math.PI * 2 * d - Math.PI / 2; A.px(ctx, x + Math.cos(a) * R, y + Math.sin(a) * R * 0.6, 3, 2, i % 4 ? '#e0e4ff' : '#ffffff'); A.px(ctx, x + Math.cos(a) * (R - 3), y + Math.sin(a) * (R - 3) * 0.6, 1, 1, '#9aa0d0'); }
+          A.alpha(ctx, 0.3, () => A.ring(ctx, x, y, R + 2, '#c8ccf0', (R + 2) * 0.6));
+        });
+      },
     },
     s: [
       {
         name: 'Tide Pull', dmg: 18, cd: 7, mp: 6, kind: 'custom', life: 1.2,
         desc: 'Pull on the tides like the moon does: enemies in front float up helplessly... then the pull lets go.',
         spawn(e, g, A) { H.at(e, A, 0); e.ts = H.nearby(A, e.x, e.y, 120 * H.sc(e)).filter((o) => (o.c.x - e.x) * e.dir > -6).map((o) => o.t); for (const t of e.ts) holdStun(t, 1.1); A.sfx('hover'); },
-        update(e, dt, g, A) { for (const t of e.ts) { if (t.dead || t.tutorial) continue; if (e.t < 0.7) { t.vy = -80; t.vx = U.approach(t.vx, -e.dir * 20, 3, dt); } else t.vy = 500; } if (e.t > 0.85 && !e.drop) { e.drop = true; for (const t of e.ts) if (!t.dead) A.damage(e, t, 1, 0.3); A.sfx('crash'); A.shake(3, 0.2); } },
+        update(e, dt, g, A) { for (const t of e.ts) { if (t.dead || t.tutorial) continue; if (e.t < 0.7) { floatV(t, -80, dt); t.vx = U.approach(t.vx, -e.dir * 20, 3, dt); } else t.vy = 400; } if (e.t > 0.85 && !e.drop) { e.drop = true; for (const t of e.ts) if (!t.dead) A.damage(e, t, 1, 0.3); A.sfx('crash'); A.shake(3, 0.2); } },
         draw(e, ctx, ox, oy, A) { const f = A.fade(e, 0.1, 0.3); A.alpha(ctx, f, () => { for (const t of e.ts) if (!t.dead) { const c = A.center(t); for (let i = 0; i < 3; i++) { const r = ((e.t * 2 + i / 3) % 1); A.ring(ctx, c.x + ox, c.y + oy + 14 - r * 20, 6 - r * 4, '#e0e4ff', 2); } } }); },
       },
       {
@@ -489,11 +590,17 @@
         draw(e, ctx, ox, oy, A) { const x = e.x + ox, y = e.y + oy, k = Math.min(1, e.t / 0.4), r = Math.round(2 + k * 6 * H.sc(e)); A.glow(ctx, x, y, r + 4, '#e0e4ff', 0.3); A.disc(ctx, x, y, r, '#e8ecff', '#ffffff'); A.disc(ctx, x - r * 0.3, y + r * 0.2, Math.max(1, Math.round(r * 0.25)), '#c8ccf0'); },
       },
       {
-        name: 'Starlit Waltz', dmg: 12, cd: 7, mp: 6, kind: 'custom', life: 0.75,
-        desc: 'Three graceful dancing steps forward, back and forward again, a crescent slash on each.',
+        name: 'Starlit Waltz', dmg: 12, cd: 7, mp: 6, kind: 'custom', life: 0.85,
+        desc: 'Three graceful dancing steps forward, back and forward again, a big crescent slash on each... and a burst of starlight at the end.',
         spawn(e, g, A) { e.steps = 0; A.sfx('swing'); },
-        update(e, dt, g, A) { const p = A.p; const want = Math.min(3, Math.floor(e.t / 0.22) + 1); while (e.steps < want) { e.steps++; const d = e.steps === 2 ? -p.facing : p.facing; p.vx = d * 220; p.lungeT = 0.16; p.dashGrace = 0.2; e.hit.clear(); e.sd = d; e.st = e.t; A.sfx('swing', { minGap: 0.04 }); } e.x = p.cx; e.y = p.y + 10; A.hit(e, { x: p.x - 10, y: p.y, w: p.w + 20, h: p.h }, { kb: 0.6, onHit(t) { if (t.applyStatus && e.steps === 3) t.applyStatus('sleep', 0); } }); },
-        draw(e, ctx, ox, oy, A) { if (e.st === undefined) return; const k = (e.t - e.st) / 0.22; A.alpha(ctx, 1 - k, () => CRESCENT(ctx, A, e.x + ox + e.sd * 6, e.y + oy, 12, e.sd, '#c8ccf0', '#ffffff')); },
+        update(e, dt, g, A) {
+          const p = A.p, want = Math.min(3, Math.floor(e.t / 0.22) + 1);
+          while (e.steps < want) { e.steps++; const d = e.steps === 2 ? -p.facing : p.facing; p.vx = d * 220; p.lungeT = 0.16; p.dashGrace = 0.2; e.hit.clear(); e.sd = d; e.st = e.t; A.sfx('swing', { minGap: 0.04 }); twinkles(A, e, p.cx, p.y + 10, 4, 60); }
+          e.x = p.cx; e.y = p.y + 10;
+          A.hit(e, { x: p.x - 12, y: p.y, w: p.w + 24, h: p.h }, { kb: 0.6, onHit(t) { if (t.applyStatus && e.steps === 3) t.applyStatus('sleep', 0); } });
+          if (e.steps === 3 && !e.fin && e.t > e.st + 0.12) { e.fin = true; W.boom(A, e, p.cx + p.facing * 10, p.y + 10, 30 * H.sc(e)); twinkles(A, e, p.cx + p.facing * 10, p.y + 10, 10, 120); }
+        },
+        draw(e, ctx, ox, oy, A) { if (e.st === undefined) return; const k = Math.min(1, (e.t - e.st) / 0.22); A.alpha(ctx, 1 - k, () => { CRESCENT(ctx, A, e.x + ox + e.sd * 8, e.y + oy, 20 * H.sc(e), e.sd, '#c8ccf0', '#ffffff'); for (let i = 0; i < 5; i++) A.star(ctx, e.x + ox - e.sd * (6 + i * 6), e.y + oy - 8 + (i % 3) * 7, 2, i % 2 ? '#c8ccf0' : '#ffffff'); }); },
       },
     ],
     ult: {
@@ -508,13 +615,17 @@
         const p = A.p;
         A.spawn(e0, {
           life: 3.8, layer: 'screen',
-          spawn(e) { e.ts = H.nearby(A, p.cx, p.y, 340).map((o) => o.t); for (const t of e.ts) holdStun(t, 3); e.waves = []; e.wt = 0; A.sfx('surge'); },
+          spawn(e) { e.ts = H.nearby(A, p.cx, p.y, 340).map((o) => o.t); for (const t of e.ts) holdStun(t, 3.2); e.waves = []; e.wt = 0; e.slammed = new Set(); A.sfx('surge'); },
           update(e, dt, g, A) {
             e.wt -= dt; for (const w of e.waves) { w.t += dt; w.x += w.d * 340 * dt; }
-            for (const t of e.ts) if (!t.dead && !t.tutorial) { if (e.t < 2.3) { t.vy = U.approach(t.vy, -110, 3, dt); t.vx *= 0.9; } else t.vy = 620; }
-            if (e.t > 0.6 && e.t < 2.2 && e.wt <= 0) { e.wt = 0.3; const d = e.waves.length % 2 ? -1 : 1, y = p.y - 10 - (e.waves.length % 3) * 22; e.waves.push({ x: p.cx - d * 260, y, d, t: 0 }); e.hit.clear(); A.sfx('swing'); }
-            for (const w of e.waves) if (w.t < 1.4) A.hit(e, { x: w.x - 20, y: w.y - 40, w: 40, h: 80 }, { mult: 0.9, kb: 0 });
-            if (e.t > 2.5 && !e.slam) { e.slam = true; for (const t of e.ts) if (!t.dead) A.damage(e, t, 5, 0.4); A.sfx('crash'); A.sfx('boom'); A.shake(14, 0.6); A.flash(0.3); }
+            // the moon's pull drags everyone up... until gravity flips and slams them back down
+            for (const t of e.ts) if (!t.dead && !t.tutorial) { if (e.t < 1.3) { floatV(t, -100, dt); t.vx *= 0.9; } else if (e.t < 2.4) floatV(t, Math.sin(e.t * 4 + t.uid) * 12, dt); else t.vy = 400; }
+            if (e.t > 0.6 && e.t < 2.2 && e.wt <= 0) { e.wt = 0.3; const d = e.waves.length % 2 ? -1 : 1, y = p.y - 30 - (e.waves.length % 3) * 30; e.waves.push({ x: p.cx - d * 260, y, d, t: 0 }); e.hit.clear(); A.sfx('swing'); }
+            for (const w of e.waves) if (w.t < 1.4) A.hit(e, { x: w.x - 20, y: w.y - 45, w: 40, h: 90 }, { mult: 0.9, kb: 0 });
+            if (e.t > 2.4) for (const t of e.ts) if (!t.dead && !e.slammed.has(t) && (t.onGround || t.tutorial || e.t > 3.1)) {
+              e.slammed.add(t); A.damage(e, t, 5, 0.4); const c = A.center(t); A.puff(e, c.x, t.box.y + t.box.h, 8, 2);
+              if (!e.slam) { e.slam = e.t; A.sfx('crash'); A.sfx('boom'); A.shake(14, 0.6); A.flash(0.3); }
+            }
           },
           draw(e, ctx, ox, oy, A) {
             const dark = e.t < 3 ? Math.min(1, e.t * 3) * 0.65 : Math.max(0, 0.65 - (e.t - 3) * 0.9);
@@ -522,7 +633,7 @@
             const mx = p.cx + ox, my = A.top() + oy + 50, r = 60 * Math.min(1, e.t / 0.6);
             A.alpha(ctx, Math.min(1, dark * 1.5), () => { A.glow(ctx, mx, my, r + 12, '#e0e4ff', 0.3); A.disc(ctx, mx, my, Math.round(r), '#e8ecff', '#ffffff'); for (const [dx, dy, rr] of [[-18, 10, 10], [20, -14, 8], [6, 24, 6], [-26, -18, 5]]) A.disc(ctx, mx + dx * (r / 60), my + dy * (r / 60), Math.max(1, Math.round(rr * (r / 60))), '#c8ccf0'); });
             for (const w of e.waves) if (w.t < 1.4) CRESCENT(ctx, A, w.x + ox, w.y + oy, 36, w.d, '#c8ccf0', '#ffffff');
-            if (e.slam) { const k = (e.t - 2.5) / 1.3; A.alpha(ctx, 1 - k, () => A.px(ctx, -10, p.feet + oy - 3, 2000, 3 + k * 6, '#e0e4ff')); }
+            if (e.slam) { const k = (e.t - e.slam) / 1.1; A.alpha(ctx, 1 - k, () => A.px(ctx, -10, p.feet + oy - 3, 2000, 3 + k * 6, '#e0e4ff')); }
           },
         }, {});
       },
@@ -534,7 +645,7 @@
   const FLARE = { life: 0.5, update(e, dt) { e.x += e.vx * dt; e.y += e.vy * dt; e.vx *= 1 - dt * 3; e.vy *= 1 - dt * 3; }, draw(e, ctx, ox, oy, A) { A.alpha(ctx, 1 - e.t / e.life, () => A.px(ctx, e.x + ox, e.y + oy, 2, 2, e.t < 0.2 ? '#ffffff' : '#ff9a1a')); } };
   AW.solar = {
     color: '#ff9a1a', up: '#ffffff', status: 'sunburn', fx: 'flares', block: ['Sunshield Corona', 'shield'],
-    icons: ['flarePunch', 'prominence', 'dawn', 'heliostat', 'daybreak'],
+    icons: ['prominence', 'dawn', 'heliostat', 'flareBurst', 'daybreak'],
     look: { back(ctx, F) { const c = F.at('headTop'), A = F.A; A.alpha(ctx, 0.35 + 0.1 * Math.sin(F.t * 3), () => { for (let i = 0; i < 14; i++) { const a = (i / 14) * Math.PI * 2 + F.t * 0.6; A.line(ctx, c.x - F.d * 2 + Math.cos(a) * 7, c.y + 4 + Math.sin(a) * 7, c.x - F.d * 2 + Math.cos(a) * 12, c.y + 4 + Math.sin(a) * 12, i % 2 ? '#ff9a1a' : '#ffe08a'); } }); } },
     idle: { pose: (t) => IDLE.spread(t, { lift: 2 }), fx(ctx, F) { for (const h of ['handF', 'handB']) { const p = F.at(h); F.A.glow(ctx, p.x, p.y, 2, '#ff9a1a', 0.4); F.A.px(ctx, p.x, p.y, 1, 1, '#ffffff'); } } },
     run: {
@@ -554,10 +665,18 @@
     },
     m1: {
       name: 'Flare Punch', dmg: 9, cd: 0.34, kind: 'custom', life: 0.3,
-      desc: 'Punches that crackle with solar flares. Every third one bursts like a tiny sun.',
+      desc: 'Punches that crackle with solar flares. Every third one bursts like a small sun.',
       spawn(e, g, A) { const p = A.p; p._fp = ((p._fp || 0) + 1) % 3; e.n = p._fp; A.sfx(e.n === 0 ? 'ignite' : 'punchHit', { minGap: 0.04 }); },
-      update(e, dt, g, A) { H.at(e, A, 0); if (e.n === 0) A.hitR(e, e.x + e.dir * 18, e.y, 16 * H.sc(e), { mult: 1.6, kb: 1.2 }); else H.melee(e, A, 30 * H.sc(e), 20); },
-      draw(e, ctx, ox, oy, A) { const k = e.t / e.life, x = e.x + ox + e.dir * (10 + 10 * Math.min(1, k * 4)), y = e.y + oy; A.alpha(ctx, 1 - k, () => { if (e.n === 0) SUN(ctx, A, x + e.dir * 6, y, 4 + k * 8, e.t, '#ff9a1a'); else { A.disc(ctx, x, y, 3, '#ff9a1a', '#ffffff'); for (let i = 0; i < 4; i++) A.px(ctx, x - e.dir * (4 + i * 3), y - 2 + (i % 2) * 4, 2, 1, '#ffe08a'); } }); },
+      update(e, dt, g, A) { H.at(e, A, 0); if (e.n === 0) { A.hitR(e, e.x + e.dir * 20, e.y, 20 * H.sc(e), { mult: 1.6, kb: 1.2 }); if (!e.sh) { e.sh = true; A.spawn(e, W.SHOCK, { x: e.x + e.dir * 22, y: e.y, r: 22 * H.sc(e), dmg: 0, life: 0.3 }); A.shake(2, 0.1); } } else H.melee(e, A, 32 * H.sc(e), 22); },
+      draw(e, ctx, ox, oy, A) {
+        const k = e.t / e.life, d = e.dir, x = e.x + ox + d * (10 + 10 * Math.min(1, k * 4)), y = e.y + oy;
+        A.alpha(ctx, 1 - k, () => {
+          if (e.n === 0) { SUN(ctx, A, x + d * 8, y, 6 + k * 12, e.t, '#ff9a1a'); return; }
+          A.alpha(ctx, 0.4, () => A.disc(ctx, x, y, 6, '#ff9a1a'));
+          A.disc(ctx, x, y, 4, '#ff9a1a', '#ffffff');
+          for (let i = 0; i < 6; i++) A.px(ctx, x - d * (5 + i * 4) - (d > 0 ? 3 : 0), y - 4 + (i % 3) * 4, 3, 1, i % 2 ? '#ffe08a' : '#ffffff');
+        });
+      },
     },
     s: [
       {

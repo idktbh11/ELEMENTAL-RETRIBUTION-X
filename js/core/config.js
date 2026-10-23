@@ -12,7 +12,7 @@
 
   ERX.Config = {
     TITLE: 'ELEMENTAL RETRIBUTION X',
-    VERSION: 'v0.1.0',
+    VERSION: 'v1.1',
     BUILD_NAME: 'MAIN MENU MILESTONE',
 
     // Pixel scaling: the game renders to a small internal canvas at least

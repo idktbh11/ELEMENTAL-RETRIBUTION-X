@@ -10,6 +10,8 @@
  *   drums:  per-bar pattern; a token may stack hits, e.g. 'kh'
  *           (k=kick, s=snare, c=clap, h=hat, o=open hat, x=shaker)
  *   swing:  0..0.3, delays every off-beat 16th for that bouncy feel
+ *   once:   true = play through one time and stop (an ending), instead of looping
+ *   fadeIn: seconds to fade in (default 2); an ending that has to hit on cue uses ~0
  *
  * The sequencer also reports beats so visuals can dance in time.
  * All music here is composed for this project and synthesised live.
@@ -177,11 +179,12 @@
       const ctx = audio.ctx;
       this.out = ctx.createGain();
       this.out.gain.setValueAtTime(0.0001, ctx.currentTime);
-      this.out.gain.exponentialRampToValueAtTime(1, ctx.currentTime + 2);
+      const fade = track.fadeIn !== undefined ? Math.max(0.01, track.fadeIn) : 2;
+      this.out.gain.exponentialRampToValueAtTime(1, ctx.currentTime + fade);
       this.out.connect(dest);
       this.step = 0;
       this.loop = 0;
-      this.nextTime = ctx.currentTime + 0.15;
+      this.nextTime = ctx.currentTime + (fade < 0.1 ? 0.02 : 0.15);
       this.timer = setInterval(() => this._schedule(), 25);
       this._schedule();
     }
@@ -199,6 +202,7 @@
         this.nextTime += this.stepDur;
         this.step++;
         if (this.step >= this.song.total) {
+          if (this.track.once) { this.finished = true; clearInterval(this.timer); return; }
           this.step = 0;
           this.loop++;
         }

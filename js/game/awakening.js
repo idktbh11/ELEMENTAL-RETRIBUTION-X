@@ -117,6 +117,11 @@
     TIME, FILL, T,
     /** The awakened kit for an element id. */
     kit(id) { return (ERX.Awakened || {})[id] || null; },
+    /**
+     * Has this character earned their Awakening? Not yet: every element will get its own way to unlock it
+     * (a few worlds in). Until then the meter never fills, and only the admin panel can awaken you.
+     */
+    unlocked(g) { return !!(g && g.character && g.character.awakenUnlocked); },
     /** Can this player awaken right now? */
     ready(p) {
       const g = p.game, el = g.element();
@@ -131,7 +136,8 @@
     },
     /** The moment you're awakened (the burst). */
     begin(g) {
-      const p = g.player, ab = p.ab;
+      const p = g.player, ab = p.ab, elx = g.element && g.element();
+      if (elx && ERX.ElementSfx) ERX.ElementSfx.boom(elx.id, 120, true);
       ab.awk = 0;
       ab.awakenT = TIME;
       ab.ult = 100;
@@ -220,6 +226,28 @@
         gr.addColorStop(0, col); gr.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.save(); ctx.globalAlpha *= U.clamp(a, 0, 1); ctx.fillStyle = gr; ctx.fillRect(left ? 0 : W - w, 0, w, H); ctx.restore();
       }
+    },
+    /**
+     * Every awakened Ultimate plays out like a film: letterbox bars, a slow push in, its colour
+     * bleeding in from the edges and the air full of power, for as long as the Ultimate lasts.
+     * (An Ultimate with `cinema: false` runs its own camera, like Planetfall.)
+     */
+    cinema(g, kit, e0, life) {
+      const A = ERX.Abilities.api(g), p = g.player;
+      A.spawn(e0, {
+        life, layer: 'screen',
+        spawn(e) { e.motes = []; for (let i = 0; i < 48; i++) e.motes.push({ x: Math.random(), y: Math.random(), s: 0.3 + Math.random(), ph: Math.random() * 6 }); },
+        update(e) {
+          const t = e.t, bars = t < 0.35 ? t / 0.35 : t > life - 0.5 ? Math.max(0, (life - t) / 0.5) : 1;
+          e.cam = g.ultCam = { x: p.cx, y: p.y, zoom: 1 + 0.07 * Math.sin(Math.min(1, t / life) * Math.PI), bars, t: g.t };
+        },
+        onEnd(e) { if (g.ultCam === e.cam) g.ultCam = null; },
+        draw(e, ctx, ox, oy, A2) {
+          const V = g.view || { width: 480, height: 270 }, t = e.t, k = Math.min(1, t / 0.4, (life - t) / 0.6), col = e.pal.c;
+          Awakening.sideGlow(ctx, V.width, V.height, col, 0.24 * k);
+          A2.alpha(ctx, 0.8 * k, () => { for (const m of e.motes) { const x = (m.x * V.width + t * 30 * m.s) % V.width, y = V.height - ((m.y * V.height + t * 60 * m.s) % V.height), s = m.s > 1 ? 2 : 1; A2.px(ctx, x + Math.sin(t * 3 + m.ph) * 4, y, s, s, m.s > 0.8 ? '#ffffff' : e.pal.l); } });
+        },
+      }, { isUlt: true });
     },
   };
 

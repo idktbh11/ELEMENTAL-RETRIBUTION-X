@@ -5,7 +5,7 @@
  *   at the horizon turns around... it's THE VOICE, in person -> your element
  *   gets scanned -> the Julforic Pillars -> 7 locked worlds (they depend on
  *   your element) -> he shoots an energy key at world 1's lock -> he goes to
- *   his HQ -> jump into world 1 (still being built) or visit the HQ.
+ *   his HQ -> jump into world 1 (js/game/story-world.js) or visit the HQ.
  *
  * Also: the HQ staff and Brenda's armour shop.
  */
@@ -346,38 +346,6 @@
     g.setObjective('JUMP INTO WORLD 1  -OR-  VISIT THE HQ', null, 1);
   }
 
-  // ================================================== JUMP INTO WORLD 1
-  function* jumpIntoWorld(g) {
-    const p = g.player;
-    g.lockControls(true);
-    g.objective = null;
-    p.vx = 0;
-    p.facing = 1;
-    g.music(null);
-    yield 0.4;
-    g.startLaunch();                  // up you go, towards world 1
-    yield 2.0;
-    g.blackout();                     // ...
-    yield 1.4;
-    // guess who
-    g.dropSlime();
-    yield () => (g.rev.slime.landed ? true : undefined);
-    sfx('crash');
-    ERX.FX.shake(4, 0.35);
-    yield 1.0;
-    yield* say(g, SLIME, '...');
-    yield* say(g, SLIME, "Oh. It's YOU. Again.");
-    if (g.element() && g.element().id === 'chaos') yield* say(g, SLIME, '...Why are you flickering like that. Stay back. I mean it.');
-    g.rev.slime.angry = true;
-    yield* say(g, SLIME, 'World 1? Not here yet, be patient >:(', { effect: 'shake' });
-    yield* say(g, SLIME, "It's still being built. Go back to your void. Shoo.");
-    ERX.Scenes.push('demoEnd', {
-      game: g, title: 'WORLD 1: COMING SOON',
-      message: 'World 1 (and its Julforic Pillar) is still being built. The Voice says it is "definitely almost ready". The Voice is lying.',
-      stay: 'BACK TO THE VOID',
-    });
-  }
-
   // ================================================== RETURNING / AFTER
   function* backInVoid(g) {
     g.lockControls(false);
@@ -392,7 +360,8 @@
   function* shop(g, npc) {
     const c = g.character, p = g.player;
     const B = npcSpeaker(MINERS.brenda);
-    c.armorOwned = c.armorOwned || [];
+    const Inv = ERX.Inventory, item = (a) => 'armor:' + a.id;
+    Inv.ensure(c);
     npc.talking = true;
     if (g.element() && g.element().id === 'chaos') yield* say(g, B, npc.visited ? "Back again, chaos kid? Please don't make the armor sentient this time." : "Welcome to Brenda's Ar— oh. OH. You're the one the boss won't shut up about. Honey, you're gonna NEED armor.");
     else yield* say(g, B, npc.visited ? 'Back again? I like repeat customers. I like ALL customers. There are three of you.' : "Welcome to Brenda's Armor! Protection for heroes, zeroes, and everyone in between.");
@@ -400,14 +369,14 @@
     for (;;) {
       yield* say(g, B, 'You have {gold}' + (c.gold || 0) + 'G{/}. What will it be?');
       const items = ERX.Armor.list;
-      const labels = items.map((a) => (c.armor === a.id ? '[WORN] ' : c.armorOwned.indexOf(a.id) !== -1 ? '[OWNED] ' : '') + a.name + '  ' + a.price + 'G  +' + a.def + ' DEF');
+      const labels = items.map((a) => (c.armor === a.id ? '[WORN] ' : Inv.has(c, item(a)) ? '[OWNED] ' : '') + a.name + '  ' + a.price + 'G  +' + a.def + ' DEF');
       labels.push('Just looking.');
       const i = yield* choose(g, labels);
       if (i >= items.length) { yield* say(g, B, 'Come back when you want to be less squishy.'); break; }
       const a = items[i];
       if (c.armor === a.id) { yield* say(g, B, "You're already wearing that. It looks great. Trust me. I'm a professional."); continue; }
-      if (c.armorOwned.indexOf(a.id) !== -1) {
-        c.armor = a.id;
+      if (Inv.has(c, item(a))) {
+        Inv.equip(c, item(a));
         ERX.Saves.update(c);
         sfx('select');
         yield* say(g, B, 'Swapped! ' + a.name + ' equipped.');
@@ -423,11 +392,12 @@
         }
         continue;
       }
+      if (!Inv.fits(c, item(a))) { sfx('deny'); yield* say(g, B, "Your bag's full, hon. I sell armor, not storage units."); continue; }
       const ok = yield* choose(g, ['Buy it (' + a.price + 'G)', 'Never mind.']);
       if (ok !== 0) continue;
       c.gold -= a.price;
-      c.armorOwned.push(a.id);
-      c.armor = a.id;
+      Inv.add(c, item(a));
+      Inv.equip(c, item(a));
       ERX.Saves.update(c);
       sfx('buy');
       g.floatText(p.cx, p.y - 8, '-' + a.price + 'G', '#ffd34d');
@@ -529,5 +499,5 @@
     },
   });
 
-  ERX.Story.void = { voidIntro, meetFigure, chaosReaction, jumpIntoWorld, backInVoid, shop, ELEMENT_LINES, FIG, THOUGHT };
+  ERX.Story.void = { voidIntro, meetFigure, chaosReaction, backInVoid, shop, ELEMENT_LINES, FIG, THOUGHT };
 })(window.ERX = window.ERX || {});

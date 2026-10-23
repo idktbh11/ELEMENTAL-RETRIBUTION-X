@@ -194,6 +194,21 @@
       if (p._awkEvery[key] >= sec) { p._awkEvery[key] = 0; return true; }
       return false;
     },
+    /** A thick bolt of lightning from (x0, y0) to (x1, y1): glow, coloured body, white core and a few forks. w = core width. */
+    bolt(ctx, A, x0, y0, x1, y1, col, seed, w) {
+      w = Math.max(1, Math.round(w || 2));
+      const n = Math.max(4, Math.round(Math.hypot(x1 - x0, y1 - y0) / 10)), pts = [[x0, y0]];
+      for (let i = 1; i < n; i++) { const q = i / n; pts.push([U.lerp(x0, x1, q) + Math.sin(seed * 7 + i * 3.1) * (4 + w * 0.6), U.lerp(y0, y1, q) + Math.cos(seed * 5 + i * 2.3) * 3]); }
+      pts.push([x1, y1]);
+      const path = (c, wd) => { for (let i = 1; i < pts.length; i++) A.line(ctx, pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], c, wd); };
+      A.alpha(ctx, 0.3, () => path(col, w * 3 + 2));
+      path(col, w + 2); path('#ffffff', w);
+      for (let f = 0; f < 3 && pts.length > 3; f++) {
+        const i = 1 + ((Math.floor(Math.abs(seed) * 13) + f * 5) % (pts.length - 2)), s = f % 2 ? 1 : -1;
+        let [fx, fy] = pts[i];
+        for (let k = 0; k < 3; k++) { const nx = fx + s * (6 + Math.abs(Math.sin(seed + f * 2 + k)) * 10), ny = fy + 6 + k * 3; A.line(ctx, fx, fy, nx, ny, k ? col : '#ffffff', Math.max(1, Math.round(w / 2))); fx = nx; fy = ny; }
+      }
+    },
     /** Hold the player in a pose during an Ultimate (pose: name or fn(t) -> joints). */
     hold(A, pose, lift, max) { A.p.ultHold = { pose, lift: lift || 0, max: max || 6, t: 0 }; return A.p.ultHold; },
     release(A) { A.p.ultHold = null; },
@@ -201,6 +216,55 @@
     ease: (k) => (k < 0 ? 0 : k > 1 ? 1 : k * k * (3 - 2 * k)),
     easeOut: (k) => 1 - Math.pow(1 - U.clamp(k, 0, 1), 3),
     easeIn: (k) => Math.pow(U.clamp(k, 0, 1), 3),
+
+    // ------------------------------------------------------- impact kit
+    // shared pieces that make awakened moves land hard (each move still draws its own thing)
+    /** A cosmetic shockwave: a white flash, a thick expanding ring, a dotted inner ring and radial streaks. o: r, flat (y squash), c (colour). */
+    SHOCK: {
+      life: 0.4,
+      spawn(e) { e.a0 = Math.random() * 6; },
+      draw(e, ctx, ox, oy, A) {
+        const k = Math.min(1, e.t / e.life), q = H.easeOut(k), x = e.x + ox, y = e.y + oy, R = e.r || 24, f = e.flat || 1, c = e.c || e.pal.c;
+        if (e.t < 0.06) A.disc(ctx, x, y, Math.max(2, Math.round(R * 0.4 * (f < 1 ? 0.7 : 1))), '#ffffff');
+        A.alpha(ctx, 1 - k, () => {
+          const r1 = R * (0.3 + q * 0.7), r2 = R * (0.15 + q * 0.6);
+          for (let w = 0; w < 3; w++) A.ring(ctx, x, y, Math.max(1, r1 - w), w ? c : '#ffffff', Math.max(1, (r1 - w) * f));
+          A.ring(ctx, x, y, r2, e.pal.l || c, Math.max(1, r2 * f), 2);
+          for (let i = 0; i < 10; i++) { const a = e.a0 + i * 0.628, ra = R * (0.35 + q * 0.5), rb = R * (0.6 + q * 0.6); A.line(ctx, x + Math.cos(a) * ra, y + Math.sin(a) * ra * f, x + Math.cos(a) * rb, y + Math.sin(a) * rb * f, i % 2 ? c : '#ffffff', i % 3 ? 1 : 2); }
+        });
+      },
+    },
+    /** Hit hard at (x, y): an explosion of radius r (damage, sound, shake) plus a shockwave. o: mult (damage), flat (squash the ring). */
+    boom(A, e, x, y, r, o) {
+      o = o || {};
+      A.blast(e, x, y, r, o.mult !== undefined ? { dmg: e.dmg * o.mult } : undefined);
+      A.spawn(e, H.SHOCK, { x, y, r: r * 1.15, flat: o.flat || 1, dmg: 0 });
+      A.shake(Math.min(5, 1.5 + r / 20), 0.18);
+    },
+    /** A thick glowing straight beam from (x0, y0) to (x1, y1): soft glow, coloured body, light inner, white core. */
+    beam(ctx, A, x0, y0, x1, y1, w, c, l) {
+      w = Math.max(1, Math.round(w));
+      A.alpha(ctx, 0.3, () => A.line(ctx, x0, y0, x1, y1, c, w * 2 + 3));
+      A.line(ctx, x0, y0, x1, y1, c, w + 2);
+      if (w > 1) A.line(ctx, x0, y0, x1, y1, l || '#ffffff', w);
+      A.line(ctx, x0, y0, x1, y1, '#ffffff', Math.max(1, Math.round(w / 2)));
+    },
+    /** A big crescent smear (a limb or weapon swing) around (x, y), facing d. k: 0 -> 1 progress (the head sweeps, then the tail catches up). */
+    smear(ctx, A, x, y, r, d, k, c, thick, a0, a1) {
+      a0 = a0 === undefined ? -1.5 : a0; a1 = a1 === undefined ? 1.2 : a1;
+      const n = Math.max(12, Math.round(r * 2.4)), head = Math.min(1, k * 1.7), tail = U.clamp(k * 1.7 - 0.7, 0, 1);
+      if (head <= tail) return;
+      for (let i = 0; i <= n; i++) {
+        const q = i / n;
+        if (q > head || q < tail) continue;
+        const a = U.lerp(a0, a1, q), th = Math.max(1, Math.round(thick * Math.sin(((q - tail) / (head - tail)) * Math.PI)));
+        for (let t = 0; t < th; t++) A.px(ctx, x + Math.cos(a) * (r - t) * d, y + Math.sin(a) * (r - t), 1, 1, t === 0 ? '#ffffff' : t === th - 1 && th > 2 ? (A.C ? A.C.mix(c, '#000000', 0.25) : c) : c);
+      }
+    },
+    /** Bits that fly up and fall back down (rocks, droplets, shards): cosmetic particles in `cols`. */
+    debris(A, x, y, n, cols, sp, o) {
+      for (let i = 0; i < n; i++) { const a = -Math.PI / 2 + A.rnd(-1.3, 1.3), v = (sp || 140) * A.rnd(0.4, 1); A.g.fx.add(Object.assign({ x: x + A.rnd(-3, 3), y: y + A.rnd(-3, 3), vx: Math.cos(a) * v, vy: Math.sin(a) * v, ay: 420, life: A.rnd(0.4, 0.8), color: cols[i % cols.length], size: i % 3 ? 1 : 2, fadeOut: 0.25 }, o)); }
+    },
   };
 
   ERX.AwkHelp = H;

@@ -9,6 +9,8 @@
   const { J, IDLE, RUN } = W;
   const Phys = () => ERX.GameEngine.Physics;
   const dot = (g, x, y, vx, vy, color, o) => g.fx.add(Object.assign({ x, y, vx, vy, life: 0.5, color, size: 1, fadeOut: 0.3 }, o));
+  // the size of the view on screen (it follows the window, so never assume 480x270)
+  const view = (A) => A.g.view || { width: 480, height: 270 };
   const holdStun = (t, s) => { if (!t.applyStatus) return; t.applyStatus('stagger', 0); if (t.status.stagger) t.status.stagger.t = s; };
   const heal = (A, n) => { const p = A.p; n = Math.round(n); if (n <= 0 || p.hp >= p.maxHp) return; p.hp = Math.min(p.maxHp, p.hp + n); A.g.floatText(p.cx, p.y - 6, '+' + n, '#7af0a0'); };
 
@@ -17,7 +19,7 @@
   const bleedSpray = (A, e, x, y, n) => { for (let i = 0; i < n; i++) A.spawn(e, BDROP, { x, y, vx: A.rnd(-100, 100), vy: A.rnd(-180, -20) }); };
   AW.blood = {
     color: '#ff2a2a', up: '#ffd0d0', status: 'bleed', fx: 'drips', block: ['Hemoglobin Shell', 'shield'],
-    icons: ['hemoblade', 'bite', 'bloodMoon', 'pact', 'whips'],
+    icons: ['bite', 'bloodMoon', 'pact', 'whips', 'exsanguinate'],
     look: { fx(ctx, F) { const e = F.at('eye'); F.A.px(ctx, e.x, e.y, 1, 2, '#ff2a2a'); for (let i = 0; i < 3; i++) { const a = F.t * 2.5 + i * 2.1, x = F.x + Math.cos(a) * 10, y = F.y - 13 + Math.sin(a) * 6; F.A.disc(ctx, x, y, 1, '#c8102a', '#ff6a6a'); } } },
     idle: { pose: (t) => IDLE.claws(t), fx(ctx, F) { for (const h of ['handF', 'handB']) { const p = F.at(h); for (let i = 0; i < 3; i++) F.A.px(ctx, p.x - 1 + i, p.y - 2, 1, 2, '#ff2a2a'); } } },
     run: {
@@ -39,15 +41,41 @@
       name: 'Hemoblade', dmg: 9, cd: 0.34, kind: 'custom', life: 0.28,
       desc: 'Your blood hardens into a long sword: slash, slash, then a piercing thrust.',
       spawn(e, g, A) { const p = A.p; p._hemo = ((p._hemo || 0) + 1) % 3; e.n = p._hemo; A.sfx('swing', { minGap: 0.04 }); },
-      update(e, dt, g, A) { H.at(e, A, 0); if (e.n === 0) { const L = 46 * H.sc(e); A.hit(e, { x: e.dir > 0 ? e.x : e.x - L, y: e.y - 4, w: L, h: 8 }, { mult: 1.5, kb: 1, onHit(t) { const c = A.center(t); bleedSpray(A, e, c.x, c.y, 5); } }); } else H.melee(e, A, 32 * H.sc(e), 24); },
-      draw(e, ctx, ox, oy, A) { const k = Math.min(1, e.t / 0.1), x = e.x + ox, y = e.y + oy, d = e.dir, f = 1 - Math.max(0, e.t - 0.1) / 0.18; A.alpha(ctx, f, () => { if (e.n === 0) { const L = 46 * H.sc(e) * k; A.line(ctx, x + d * 4, y, x + d * L, y, '#a8102a', 3); A.line(ctx, x + d * 4, y, x + d * L, y, '#ff6a6a', 1); A.tri(ctx, x + d * (L + 3), y + 2, 4, 0, '#ffd0d0'); } else A.arc(ctx, x, y, 24 * H.sc(e), d, '#ff2a2a', 2, e.n === 1 ? -1.3 : 1.3, U.lerp(e.n === 1 ? -1.3 : 1.3, e.n === 1 ? 1.1 : -1.1, k)); }); },
+      update(e, dt, g, A) { H.at(e, A, 0); if (e.n === 0) { const L = 50 * H.sc(e); A.hit(e, { x: e.dir > 0 ? e.x : e.x - L, y: e.y - 5, w: L, h: 10 }, { mult: 1.5, kb: 1, onHit(t) { const c = A.center(t); bleedSpray(A, e, c.x, c.y, 6); } }); } else H.melee(e, A, 32 * H.sc(e), 24); },
+      draw(e, ctx, ox, oy, A) {
+        const k = Math.min(1, e.t / 0.1), x = e.x + ox, y = e.y + oy, d = e.dir, f = 1 - Math.max(0, e.t - 0.1) / 0.18;
+        A.alpha(ctx, f, () => {
+          if (e.n !== 0) { W.smear(ctx, A, x, y, 24 * H.sc(e), d, k * 0.75, '#ff2a2a', 4, e.n === 1 ? -1.3 : 1.3, e.n === 1 ? 1.1 : -1.1); return; }
+          const L = 50 * H.sc(e) * k;
+          W.beam(ctx, A, x + d * 4, y, x + d * L, y, 2, '#a8102a', '#ff6a6a');
+          for (let i = 0; i < 4; i++) A.px(ctx, x + d * (L + i), y - (3 - i), 1, (3 - i) * 2 + 1, '#ffd0d0');
+          for (let i = 0; i < 4; i++) A.px(ctx, x + d * L * (0.3 + i * 0.18), y + 3 + ((e.t * 80 + i * 3) % 6), 1, 2, '#c8102a');
+        });
+      },
     },
     s: [
       {
-        name: 'Vampiric Bite', dmg: 26, cd: 6, mp: 5, kind: 'custom', life: 0.4,
-        desc: 'Lunge at the nearest enemy and sink your fangs in. Half of the damage comes back to you as health.',
-        spawn(e, g, A) { const p = A.p, t = A.near(p.cx, p.y, 120); e.tg = t; if (!t) { e.dead = true; return; } const c = A.center(t), side = c.x > p.cx ? 1 : -1, nx = c.x - side * 10 - p.w / 2; if (!Phys().overlapsSolid(g.level, nx, p.y, p.w, p.h)) p.x = nx; p.facing = side; e.dir = side; A.damage(e, t, 1, 0.3); heal(A, e.dmg * (e.up ? 0.7 : 0.5)); bleedSpray(A, e, c.x, c.y, 10); if (t.applyStatus) t.applyStatus('bleed', e.potency); A.sfx('punchHit'); e.c = c; },
-        draw(e, ctx, ox, oy, A) { if (!e.c) return; const k = e.t / e.life, x = e.c.x + ox, y = e.c.y + oy - 4; A.alpha(ctx, 1 - k, () => { for (const s of [-1, 1]) { A.tri(ctx, x - 3, y + s * 3, 2, -s * 5, '#ffffff'); A.tri(ctx, x + 3, y + s * 3, 2, -s * 5, '#ffffff'); } A.ring(ctx, x, y, 6 + k * 10, '#ff2a2a'); }); },
+        name: 'Vampiric Bite', dmg: 26, cd: 6, mp: 5, kind: 'custom', life: 0.5,
+        desc: 'Lunge at the nearest enemy and sink your fangs in, bursting blood over everything near it. Half of the damage comes back to you as health.',
+        spawn(e, g, A) {
+          const p = A.p, t = A.near(p.cx, p.y, 120); e.tg = t;
+          if (!t) { e.dead = true; return; }
+          const c = A.center(t), side = c.x > p.cx ? 1 : -1, nx = c.x - side * 10 - p.w / 2;
+          if (!Phys().overlapsSolid(g.level, nx, p.y, p.w, p.h)) p.x = nx;
+          p.facing = side; e.dir = side;
+          A.damage(e, t, 1, 0.3); heal(A, e.dmg * (e.up ? 0.7 : 0.5)); bleedSpray(A, e, c.x, c.y, 14);
+          if (t.applyStatus) t.applyStatus('bleed', e.potency);
+          A.blast(e, c.x, c.y, 24 * H.sc(e), { dmg: e.dmg * 0.5 }); A.spawn(e, W.SHOCK, { x: c.x, y: c.y, r: 22, dmg: 0, c: '#ff2a2a' }); A.shake(3, 0.15);
+          A.sfx('punchHit'); e.c = c;
+        },
+        draw(e, ctx, ox, oy, A) {
+          if (!e.c) return;
+          const k = e.t / e.life, x = e.c.x + ox, y = e.c.y + oy - 4, close = Math.min(1, k * 6), p = A.p;
+          A.alpha(ctx, 1 - k, () => {
+            for (const fx of [-4, 4]) { A.tri(ctx, x + fx, y - 9 + close * 5, 4, -8, '#ffffff'); A.tri(ctx, x + fx, y + 9 - close * 5, 4, 8, '#ffffff'); }
+            for (let i = 0; i < 8; i++) { const q = (k * 2 + i / 8) % 1, sx = U.lerp(e.c.x, p.cx, q) + ox, sy = U.lerp(e.c.y, p.y + 10, q) + oy - Math.sin(q * Math.PI) * 10; A.px(ctx, sx - 1, sy - 1, 2, 2, i % 2 ? '#ff2a2a' : '#a8102a'); }
+          });
+        },
       },
       {
         name: 'Blood Moon Orb', dmg: 16, cd: 6, mp: 6, kind: 'custom', life: 1.6,
@@ -57,18 +85,38 @@
         draw(e, ctx, ox, oy, A) { const x = e.x + ox, y = e.y + oy, r = Math.round(6 * H.sc(e)); A.glow(ctx, x, y, r + 3, '#ff2a2a', 0.3); A.disc(ctx, x, y, r, '#a8102a', '#ff6a6a'); A.px(ctx, x - 2, y - 2, 2, 2, '#ffd0d0'); },
       },
       {
-        name: 'Blood Pact', dmg: 0, cd: 18, mp: 0, kind: 'custom', life: 1,
-        desc: 'Pay with your own blood: lose some health, refill all your mana and reset your other skills.',
-        spawn(e, g, A) { const p = A.p, cost = Math.round(p.maxHp * (e.up ? 0.1 : 0.15)); p.hp = Math.max(1, p.hp - cost); p.mp = p.maxMp; for (const s of ['s1', 's2', 's4', 's5']) p.ab.cd[s] = 0; A.g.floatText(p.cx, p.y - 6, '-' + cost + ' HP', '#ff4a4a'); A.g.floatText(p.cx, p.y - 16, 'PACT SEALED', e.pal.l); A.sfx('surge'); bleedSpray(A, e, p.cx, p.y + 10, 16); },
+        name: 'Blood Pact', dmg: 16, cd: 18, mp: 0, kind: 'custom', life: 1,
+        desc: 'Pay with your own blood: lose some health in a crimson nova that hurts everything around you, refill all your mana and reset your other skills.',
+        spawn(e, g, A) {
+          const p = A.p, cost = Math.round(p.maxHp * (e.up ? 0.1 : 0.15));
+          p.hp = Math.max(1, p.hp - cost); p.mp = p.maxMp; for (const s of ['s1', 's2', 's4', 's5']) p.ab.cd[s] = 0;
+          A.g.floatText(p.cx, p.y - 6, '-' + cost + ' HP', '#ff4a4a'); A.g.floatText(p.cx, p.y - 16, 'PACT SEALED', e.pal.l); A.sfx('surge');
+          bleedSpray(A, e, p.cx, p.y + 10, 24); W.boom(A, e, p.cx, p.y + 10, 40 * H.sc(e));
+        },
         update(e, dt, g, A) { e.x = A.p.cx; e.y = A.p.y + 10; },
-        draw(e, ctx, ox, oy, A) { const k = e.t / e.life; A.alpha(ctx, 1 - k, () => { A.ring(ctx, e.x + ox, e.y + oy, 6 + k * 20, '#ff2a2a', (6 + k * 20) * 0.4); for (let i = 0; i < 5; i++) { const a = i * 1.257 + e.t; A.px(ctx, e.x + ox + Math.cos(a) * 12, e.y + oy + Math.sin(a) * 12, 2, 2, '#ffd0d0'); } }); },
+        draw(e, ctx, ox, oy, A) {
+          const k = e.t / e.life, x = e.x + ox, y = e.y + oy;
+          A.alpha(ctx, 1 - k, () => {
+            for (let i = 0; i < 2; i++) A.ring(ctx, x, y + 12, 8 + k * 26 - i * 3, i ? '#a8102a' : '#ff2a2a', (8 + k * 26 - i * 3) * 0.35);
+            for (let i = 0; i < 5; i++) { const a = i * 1.257 + e.t * 2, px = x + Math.cos(a) * 14, py = y + 12 + Math.sin(a) * 5; A.px(ctx, px - 1, py - 18 * Math.min(1, k * 4), 2, 18 * Math.min(1, k * 4), '#c8102a'); A.px(ctx, px - 1, py - 18 * Math.min(1, k * 4), 2, 1, '#ffd0d0'); }
+          });
+        },
       },
       {
         name: 'Crimson Whips', dmg: 7, cd: 5, mp: 5, kind: 'custom', life: 0.6,
-        desc: 'Two whips of blood lash out in a crossing X, over and over.',
+        desc: 'Two whips of blood lash out in a crossing X, over and over, cracking at the tips.',
         spawn(e, g, A) { A.sfx('swing'); },
-        update(e, dt, g, A) { H.at(e, A, 0); const L = 50 * H.sc(e); A.tick(e, { x: e.dir > 0 ? e.x : e.x - L, y: e.y - 16, w: L, h: 32 }, 0.12, { kb: 0.3 }); },
-        draw(e, ctx, ox, oy, A) { const x = e.x + ox, y = e.y + oy, L = 50 * H.sc(e), d = e.dir; for (const s of [-1, 1]) { const ph = e.t * 18 + (s > 0 ? 0 : Math.PI); for (let i = 0; i <= 16; i++) { const q = i / 16, wx = x + d * q * L, wy = y + s * (q - 0.5) * 28 + Math.sin(ph + q * 6) * 4 * q; A.px(ctx, wx, wy, 2, 2, i % 3 ? '#ff2a2a' : '#a8102a'); } } },
+        update(e, dt, g, A) { H.at(e, A, 0); const L = 54 * H.sc(e); A.tick(e, { x: e.dir > 0 ? e.x : e.x - L, y: e.y - 17, w: L, h: 34 }, 0.12, { kb: 0.3 }); },
+        draw(e, ctx, ox, oy, A) {
+          const x = e.x + ox, y = e.y + oy, L = 54 * H.sc(e), d = e.dir;
+          A.alpha(ctx, A.fade(e, 0.03, 0.12), () => {
+            for (const s of [-1, 1]) {
+              const ph = e.t * 18 + (s > 0 ? 0 : Math.PI); let lx = x, ly = y;
+              for (let i = 1; i <= 20; i++) { const q = i / 20, wx = x + d * q * L, wy = y + s * (q - 0.5) * 30 + Math.sin(ph + q * 6) * 5 * q; A.line(ctx, lx, ly, wx, wy, '#a8102a', Math.max(1, Math.round(3 - q * 2))); A.px(ctx, wx, wy, 1, 1, i % 3 ? '#ff2a2a' : '#ff8a8a'); lx = wx; ly = wy; }
+              if (Math.floor(e.t * 16) % 2) A.star(ctx, lx, ly, 3, '#ffd0d0', '#ff2a2a');
+            }
+          });
+        },
       },
       {
         name: 'Exsanguinate', dmg: 22, cd: 10, mp: 7, kind: 'custom', life: 1.8,
@@ -89,26 +137,46 @@
       run(A, e0) {
         const p = A.p;
         A.spawn(e0, {
-          life: 3.6,
-          spawn(e) { e.bx = p.cx - e.dir * 20; e.gy = p.feet; e.ts = H.nearby(A, p.cx, p.y, 340).map((o) => o.t); A.sfx('surge'); A.sfx('rumble', { dur: 2.4 }); },
+          life: 3.9,
+          spawn(e) { e.bx = p.cx - e.dir * 20; e.gy = p.feet; e.ts = H.nearby(A, p.cx, p.y, 340).map((o) => o.t); e.drips = []; A.sfx('surge'); A.sfx('rumble', { dur: 2.6 }); },
           update(e, dt, g, A) {
-            if (e.t > 0.4 && e.t < 2.2) { e.bx += e.dir * 170 * dt; e.gy = A.ground(e.bx, e.gy - 30); A.tick(e, { x: e.bx - 24, y: e.gy - 70, w: 48, h: 70 }, 0.2, { mult: 0.8, kb: 1.4, dir: e.dir }); if (Math.random() < dt * 8) A.shake(2, 0.1); e.swing = (e.swing || 0) - dt; if (e.swing <= 0) { e.swing = 0.45; e.sw = e.t; A.hit(e, { x: e.dir > 0 ? e.bx : e.bx - 70, y: e.gy - 80, w: 70, h: 80 }, { mult: 1.6, kb: 1 }); e.hit.clear(); A.sfx('swing'); } }
-            if (e.t > 2.5 && !e.boom) { e.boom = true; A.blast(e, e.bx, e.gy - 30, 110 * H.sc(e), { dmg: e.dmg * 6 }); A.sfx('crash'); A.flash(0.3); A.shake(10, 0.5); bleedSpray(A, e, e.bx, e.gy - 30, 40); }
+            for (const d of e.drips) { d.t += dt; d.vy += 500 * dt; d.x += d.vx * dt; d.y += d.vy * dt; }
+            e.drips = e.drips.filter((d) => d.t < 1.2);
+            // the behemoth charges, stomping, swinging its blood axe
+            if (e.t > 0.4 && e.t < 2.3) {
+              e.bx += e.dir * 160 * dt; e.gy = A.ground(e.bx, e.gy - 30);
+              A.tick(e, { x: e.bx - 34, y: e.gy - 130, w: 68, h: 130 }, 0.2, { mult: 0.8, kb: 1.4, dir: e.dir });
+              e.stomp = (e.stomp || 0) - dt; if (e.stomp <= 0) { e.stomp = 0.32; A.shake(4, 0.12); A.sfx('thud', { minGap: 0.1 }); }
+              e.swing = (e.swing || 0) - dt; if (e.swing <= 0) { e.swing = 0.5; e.sw = e.t; A.hit(e, { x: e.dir > 0 ? e.bx : e.bx - 110, y: e.gy - 140, w: 110, h: 140 }, { mult: 1.8, kb: 1.2 }); e.hit.clear(); A.sfx('swing'); }
+              if (Math.random() < dt * 20) e.drips.push({ x: e.bx + A.rnd(-30, 30), y: e.gy - A.rnd(30, 120), vx: A.rnd(-20, 20), vy: 0, t: 0 });
+            }
+            // ...collapses into a sphere of blood... which explodes into countless spikes
+            if (e.t > 2.65 && !e.boom) { e.boom = e.t; A.blast(e, e.bx, e.gy - 50, 140 * H.sc(e), { dmg: e.dmg * 7 }); A.sfx('crash'); A.sfx('boom'); A.flash(0.35); A.shake(14, 0.6); bleedSpray(A, e, e.bx, e.gy - 50, 60); for (let i = 0; i < 40; i++) e.drips.push({ x: e.bx, y: e.gy - 50, vx: A.rnd(-260, 260), vy: A.rnd(-300, -40), t: 0 }); }
           },
           draw(e, ctx, ox, oy, A) {
-            const x = e.bx + ox, gy = e.gy + oy, d = e.dir, rise = Math.min(1, e.t / 0.4);
-            if (e.t < 2.3) {
-              const H0 = 70 * rise, step = Math.sin(e.t * 10) * 3, cr = e.t > 2.2 ? (e.t - 2.2) * 10 : 0;
+            const x = e.bx + ox, gy = e.gy + oy, d = e.dir, rise = Math.min(1, e.t / 0.45);
+            A.alpha(ctx, 0.25 * Math.min(1, e.t * 3) * (e.boom ? Math.max(0, 1 - (e.t - e.boom)) : 1), () => A.px(ctx, -10, -10, 2000, 2000, '#3a0008'));
+            if (e.t < 2.45) {
+              const H0 = 130 * rise, step = Math.sin(e.t * 9) * 5, cr = e.t > 2.35 ? (e.t - 2.35) * 10 : 0;
               A.alpha(ctx, 1 - cr, () => {
-                A.px(ctx, x - 14, gy - 22 * rise, 10, 22 * rise, '#a8102a'); A.px(ctx, x + 4, gy - 22 * rise + step, 10, 22 * rise - step, '#a8102a');
-                A.px(ctx, x - 20, gy - H0 + 18, 40, Math.max(0, H0 - 40), '#c8102a'); A.px(ctx, x - 20, gy - H0 + 18, 40, 3, '#ff6a6a');
-                A.disc(ctx, x + d * 2, gy - H0 + 10, 11, '#a8102a'); A.px(ctx, x + d * 5, gy - H0 + 7, 4, 2, '#ffd34d'); A.px(ctx, x - d * 1, gy - H0 + 7, 3, 2, '#ffd34d'); A.tri(ctx, x - 8, gy - H0 + 2, 4, 6, '#ff6a6a'); A.tri(ctx, x + 8, gy - H0 + 2, 4, 6, '#ff6a6a');
-                // a blood axe formed from its own arm
-                const sk = e.sw ? Math.min(1, (e.t - e.sw) / 0.25) : 1, a = U.lerp(-2, 0.8, sk), hx = x + d * 18, hy = gy - H0 + 24;
-                A.line(ctx, hx, hy, hx + Math.cos(a) * 34 * d, hy + Math.sin(a) * 34, '#a8102a', 4); A.disc(ctx, hx + Math.cos(a) * 34 * d, hy + Math.sin(a) * 34, 7, '#ff2a2a', '#ffd0d0');
+                A.px(ctx, x - 26, gy - 44 * rise, 18, 44 * rise, '#8a0a20'); A.px(ctx, x + 8, gy - 44 * rise + step, 18, 44 * rise - step, '#8a0a20');
+                A.px(ctx, x - 34, gy - H0 + 30, 68, Math.max(0, H0 - 72), '#c8102a'); A.px(ctx, x - 34, gy - H0 + 30, 68, 4, '#ff6a6a');
+                A.px(ctx, x - 20, gy - H0 + 44, 16, 14, '#a80a22'); A.px(ctx, x + 4, gy - H0 + 44, 16, 14, '#a80a22');
+                for (let i = 0; i < 3; i++) A.px(ctx, x - 12, gy - H0 + 64 + i * 10, 24, 6, '#a80a22');
+                // the head: horned, with blazing eyes and a mouthful of teeth
+                A.disc(ctx, x + d * 4, gy - H0 + 16, 18, '#a8102a', '#e83a4a'); A.px(ctx, x + d * 9 - 2, gy - H0 + 11, 6, 3, '#ffd34d'); A.px(ctx, x - d * 1 - 3, gy - H0 + 11, 5, 3, '#ffd34d');
+                A.tri(ctx, x - 14, gy - H0 + 2, 6, 14, '#ff6a6a', '#ffffff'); A.tri(ctx, x + 14, gy - H0 + 2, 6, 14, '#ff6a6a', '#ffffff');
+                for (let i = -8; i <= 8; i += 4) A.tri(ctx, x + d * 4 + i, gy - H0 + 26, 3, -5, '#ffe8e8');
+                // one arm hanging, and a blood axe grown out of the other
+                A.line(ctx, x - d * 30, gy - H0 + 40, x - d * 40, gy - H0 + 86, '#a8102a', 10);
+                const sk = e.sw ? Math.min(1, (e.t - e.sw) / 0.25) : 1, a = U.lerp(-2.2, 0.9, sk), hx = x + d * 30, hy = gy - H0 + 40;
+                const ax = hx + Math.cos(a) * 60 * d, ay = hy + Math.sin(a) * 60;
+                A.line(ctx, hx, hy, ax, ay, '#a8102a', 6); A.disc(ctx, ax, ay, 14, '#ff2a2a', '#ffd0d0'); A.disc(ctx, ax - d * 6, ay, 9, '#a8102a');
+                if (e.sw && e.t - e.sw < 0.2) A.alpha(ctx, 1 - (e.t - e.sw) / 0.2, () => A.arc(ctx, hx, hy, 62, d, '#ff6a6a', 3, -2.2, 0.9));
               });
-            } else if (!e.boom) { const k = (e.t - 2.3) / 0.2; A.disc(ctx, x, gy - 30, Math.round(26 - k * 8), '#a8102a', '#ff6a6a'); }
-            else { const k = (e.t - 2.5) / 1.1; A.alpha(ctx, 1 - k, () => { for (let i = 0; i < 20; i++) { const a = (i / 20) * Math.PI * 2, R = 20 + k * 110; A.line(ctx, x + Math.cos(a) * 10, gy - 30 + Math.sin(a) * 10, x + Math.cos(a) * R, gy - 30 + Math.sin(a) * R, i % 2 ? '#ff2a2a' : '#a8102a', 2); } }); }
+            } else if (!e.boom) { const k = (e.t - 2.45) / 0.2; A.disc(ctx, x, gy - 50, Math.round(40 - k * 10), '#a8102a', '#ff6a6a'); A.ring(ctx, x, gy - 50, 44 - k * 10, '#ffffff'); }
+            else { const k = (e.t - e.boom) / 1.2; A.alpha(ctx, Math.max(0, 1 - k), () => { for (let i = 0; i < 40; i++) { const a = (i / 40) * Math.PI * 2, R = 30 + k * (i % 2 ? 170 : 120); A.line(ctx, x + Math.cos(a) * 14, gy - 50 + Math.sin(a) * 14, x + Math.cos(a) * R, gy - 50 + Math.sin(a) * R, i % 2 ? '#ff2a2a' : '#a8102a', i % 3 ? 2 : 3); } A.ring(ctx, x, gy - 50, 20 + k * 200, '#ff6a6a', (20 + k * 200) * 0.6, 2); }); }
+            for (const dp of e.drips) A.px(ctx, dp.x + ox, dp.y + oy, 2, 3, dp.t < 0.4 ? '#ff2a2a' : '#a8102a');
           },
         }, {});
       },
@@ -121,7 +189,7 @@
   const SCYTHE = (ctx, A, hx, hy, a, d, L, col) => { const tx = hx + Math.cos(a) * L * d, ty = hy + Math.sin(a) * L; A.line(ctx, hx - Math.cos(a) * 4 * d, hy - Math.sin(a) * 4, tx, ty, '#3a2e24', 1); for (let i = 0; i < 12; i++) { const b = a + Math.PI / 2 + (i / 12) * 1.2, r = 10 - i * 0.6; A.px(ctx, tx + Math.cos(b) * r * d * 0.9, ty + Math.sin(b) * r * 0.9, 1, 1, i < 2 ? '#ffffff' : col); } };
   AW.death = {
     color: '#d8e0f0', up: '#7aff9a', status: 'doom', fx: 'ashes', block: ['Ossuary Wall', 'wall'],
-    icons: ['soulScythe', 'coffin', 'banshee', 'tombstones', 'door'],
+    icons: ['coffinDrop', 'banshee', 'tombstones', 'door', 'reap'],
     look: { fx(ctx, F) { const e = F.at('eye'); F.A.px(ctx, e.x, e.y, 1, 1, '#7aff9a'); F.A.alpha(ctx, 0.4, () => F.A.disc(ctx, e.x, e.y, 2, '#7aff9a')); } },
     idle: {
       pose: (t) => IDLE.shoulder(t),
@@ -197,20 +265,45 @@
       run(A, e0) {
         const p = A.p;
         A.spawn(e0, {
-          life: 4,
-          spawn(e) { e.gx = p.cx + e.dir * 24; e.gy = p.feet; e.army = []; for (let i = 0; i < 18; i++) e.army.push({ x: e.gx, y: e.gy - 4 - (i % 3) * 8, sp: A.rnd(150, 230), d: i * 0.05, ph: Math.random() * 6 }); e.ts = H.nearby(A, p.cx, p.y, 340).map((o) => o.t); A.sfx('surge'); A.sfx('rumble', { dur: 3 }); },
+          life: 4.2,
+          spawn(e) { e.gx = p.cx + e.dir * 26; e.gy = p.feet; e.army = []; for (let i = 0; i < 30; i++) e.army.push({ x: e.gx, y: e.gy - 4 - (i % 3) * 8, sp: A.rnd(150, 240), d: i * 0.045, ph: Math.random() * 6, fly: i % 4 === 0 }); e.souls = []; e.ts = H.nearby(A, p.cx, p.y, 340).map((o) => o.t); A.sfx('surge'); A.sfx('rumble', { dur: 3.4 }); },
           update(e, dt, g, A) {
-            for (const s of e.army) { if (e.t < s.d || e.t > 2.4) continue; s.x += e.dir * s.sp * dt; A.tick(e, { x: s.x - 6, y: s.y - 14, w: 12, h: 20 }, 0.3, { mult: 0.6, kb: 0.5, onHit(t) { if (t.applyStatus) t.applyStatus('doom', e.potency); } }); }
-            if (e.t > 2.6 && !e.slam) { e.slam = true; const c = e.ts.filter((t) => !t.dead)[0]; e.sx2 = c ? A.center(c).x : p.cx + e.dir * 100; A.hit(e, { x: e.sx2 - 60, y: e.gy - 120, w: 120, h: 120 }, { mult: 6, kb: 1.5 }); A.sfx('crash'); A.sfx('boom'); A.flash(0.3); A.shake(12, 0.6); }
+            // the army of the dead floods out of the gate
+            for (const s of e.army) { if (e.t < s.d || e.t > 2.4) continue; s.x += e.dir * s.sp * dt; if (s.fly) s.y = e.gy - 40 - Math.sin(e.t * 4 + s.ph) * 20; A.tick(e, { x: s.x - 7, y: s.y - 16, w: 14, h: 22 }, 0.3, { mult: 0.6, kb: 0.5, onHit(t) { if (t.applyStatus) t.applyStatus('doom', e.potency); } }); }
+            for (const s of e.souls) { s.t += dt; s.y -= 60 * dt; s.x += Math.sin(s.t * 6 + s.ph) * 20 * dt; }
+            e.souls = e.souls.filter((s) => s.t < 1.6);
+            if (e.sx2 === undefined && e.t > 1.6) { const c = e.ts.filter((t) => !t.dead)[0]; e.sx2 = c ? A.center(c).x : p.cx + e.dir * 110; }
+            // ...and the giant brings its scythe down
+            if (e.t > 2.8 && !e.slam) { e.slam = e.t; A.hit(e, { x: e.sx2 - 80, y: e.gy - 200, w: 160, h: 200 }, { mult: 7, kb: 1.8 }); A.sfx('crash'); A.sfx('boom'); A.flash(0.4); A.shake(16, 0.7); for (let i = 0; i < 24; i++) e.souls.push({ x: e.sx2 + A.rnd(-60, 60), y: e.gy - A.rnd(0, 40), t: 0, ph: Math.random() * 6 }); }
           },
           draw(e, ctx, ox, oy, A) {
-            const gx = e.gx + ox, gy = e.gy + oy, f = e.t > 3.5 ? 1 - (e.t - 3.5) / 0.5 : 1;
-            A.alpha(ctx, f * 0.4, () => A.px(ctx, -10, -10, 2000, 2000, '#081a10'));
-            A.alpha(ctx, f, () => { A.px(ctx, gx - 14, gy - 44, 28, 44, '#05030a'); A.px(ctx, gx - 16, gy - 46, 32, 2, '#7aff9a'); });
-            for (const s of e.army) { if (e.t < s.d || e.t > 2.4) continue; const x = s.x + ox, y = s.y + oy + Math.sin(e.t * 12 + s.ph) * 1.5; A.alpha(ctx, 0.75 * f, () => { SKULL(ctx, A, x, y - 12, '#c8ffd8', '#7aff9a'); A.px(ctx, x - 1, y - 8, 2, 8, '#c8ffd8'); A.px(ctx, x - 3, y - 6, 6, 1, '#c8ffd8'); A.line(ctx, x + e.dir * 3, y - 10, x + e.dir * 8, y - 16, '#e8e4d8'); }); }
-            // the giant
-            const rise = U.clamp((e.t - 1.8) / 0.7, 0, 1);
-            if (rise > 0) { const cx = (e.sx2 !== undefined ? e.sx2 : p.cx + e.dir * 100) + ox, top = gy - 150 * rise; A.alpha(ctx, f * 0.9, () => { A.disc(ctx, cx, top + 26, 26, '#e8e4d8'); A.px(ctx, cx - 14, top + 20, 9, 10, '#05030a'); A.px(ctx, cx + 5, top + 20, 9, 10, '#05030a'); A.px(ctx, cx - 11, top + 24, 3, 3, '#7aff9a'); A.px(ctx, cx + 8, top + 24, 3, 3, '#7aff9a'); for (let i = -10; i <= 10; i += 4) A.px(ctx, cx + i, top + 46, 3, 6, '#e8e4d8'); for (let r = 0; r < 4; r++) A.px(ctx, cx - 22, top + 60 + r * 8, 44, 3, '#c8c4b8'); const arm = e.slam ? 1 : U.clamp((e.t - 2.2) / 0.4, 0, 1); A.line(ctx, cx + 24, top + 60, cx + 40 + arm * 10, top + 60 + arm * 70, '#e8e4d8', 4); }); }
+            const gx = e.gx + ox, gy = e.gy + oy, f = e.t > 3.7 ? 1 - (e.t - 3.7) / 0.5 : 1;
+            A.alpha(ctx, f * 0.5, () => A.px(ctx, -10, -10, 2000, 2000, '#04120a'));
+            // the gateway to the realm of the dead, a green vortex turning inside it
+            A.alpha(ctx, f, () => { A.px(ctx, gx - 22, gy - 70, 44, 70, '#05030a'); for (let i = 0; i < 30; i++) { const a = e.t * 4 + i * 0.6, r = (i % 10) * 2; A.px(ctx, gx + Math.cos(a) * r, gy - 35 + Math.sin(a) * r * 1.4, 1, 1, i % 3 ? '#3aff7a' : '#c8ffd8'); } A.px(ctx, gx - 24, gy - 72, 48, 3, '#7aff9a'); A.px(ctx, gx - 24, gy - 72, 3, 72, '#7aff9a'); A.px(ctx, gx + 21, gy - 72, 3, 72, '#7aff9a'); });
+            for (const s of e.army) {
+              if (e.t < s.d || e.t > 2.4) continue;
+              const x = s.x + ox, y = s.y + oy + Math.sin(e.t * 12 + s.ph) * 1.5;
+              A.alpha(ctx, 0.8 * f, () => { if (s.fly) { SKULL(ctx, A, x, y, '#c8ffd8', '#7aff9a'); for (let i = 1; i < 4; i++) A.alpha(ctx, 0.5 - i * 0.12, () => A.px(ctx, x - e.dir * i * 4, y + 1, 3, 2, '#7aff9a')); } else { SKULL(ctx, A, x, y - 12, '#c8ffd8', '#7aff9a'); A.px(ctx, x - 1, y - 8, 2, 8, '#c8ffd8'); A.px(ctx, x - 3, y - 6, 6, 1, '#c8ffd8'); A.line(ctx, x + e.dir * 3, y - 10, x + e.dir * 10, y - 18, '#e8e4d8'); } });
+            }
+            // the giant: a skeleton the size of a building rises, raises its scythe... and brings it down
+            const rise = U.clamp((e.t - 1.6) / 0.8, 0, 1);
+            if (rise > 0 && e.sx2 !== undefined) {
+              const cx = e.sx2 + ox, top = gy - 220 * rise, sw = e.slam ? 1 : U.clamp((e.t - 2.4) / 0.4, 0, 1), d = e.dir;
+              A.alpha(ctx, f * 0.92, () => {
+                A.disc(ctx, cx, top + 40, 40, '#e8e4d8', '#ffffff'); A.px(ctx, cx - 22, top + 30, 14, 16, '#05030a'); A.px(ctx, cx + 8, top + 30, 14, 16, '#05030a');
+                W.flame(ctx, A, cx - 15, top + 42, 10, e.t, ['#3aff7a', '#7aff9a', '#ffffff']); W.flame(ctx, A, cx + 15, top + 42, 10, e.t, ['#3aff7a', '#7aff9a', '#ffffff']);
+                for (let i = -16; i <= 16; i += 5) A.px(ctx, cx + i, top + 72, 4, 9, '#e8e4d8');
+                A.px(ctx, cx - 3, top + 82, 6, 130, '#c8c4b8');
+                for (let r = 0; r < 6; r++) A.px(ctx, cx - 34, top + 96 + r * 12, 68, 4, '#c8c4b8');
+                const a = U.lerp(-2.4, 0.5, W.easeIn(sw)), sx = cx + d * 36, sy = top + 96, L = 120, ex = sx + Math.cos(a) * L * d, ey = sy + Math.sin(a) * L;
+                A.line(ctx, cx + d * 30, top + 92, sx, sy, '#e8e4d8', 6); A.line(ctx, sx, sy, ex, ey, '#5a4a3a', 4);
+                const nx = -Math.sin(a) * d, ny = Math.cos(a);
+                for (let i = 0; i < 6; i++) A.line(ctx, ex, ey, ex + nx * (44 - i * 6) - Math.cos(a) * d * i * 5, ey + ny * (44 - i * 6) - Math.sin(a) * i * 5, i ? '#c8ffd8' : '#ffffff', 3);
+              });
+            }
+            for (const s of e.souls) A.alpha(ctx, 1 - s.t / 1.6, () => { A.disc(ctx, s.x + ox, s.y + oy, 3, '#7aff9a', '#e8ffe8'); A.px(ctx, s.x + ox - 1, s.y + oy + 3, 2, 3, '#3aff7a'); });
+            if (e.slam) { const k = (e.t - e.slam) / 0.9, x = e.sx2 + ox; A.alpha(ctx, Math.max(0, 1 - k), () => { A.px(ctx, x - 6 * (1 - k), gy - 220, 12 * (1 - k) + 1, 220, '#c8ffd8'); A.ring(ctx, x, gy - 4, 20 + k * 200, '#7aff9a', (20 + k * 200) * 0.3, 2); A.ring(ctx, x, gy - 4, 10 + k * 150, '#ffffff', (10 + k * 150) * 0.3, 2); }); }
           },
         }, {});
       },
@@ -223,7 +316,7 @@
   const BLADE = (ctx, A, x, y, a, d, L, col) => { const nx = -Math.sin(a) * d, ny = Math.cos(a); for (let i = 3; i < L; i++) { const bx = x + Math.cos(a) * i * d, by = y + Math.sin(a) * i; A.px(ctx, bx, by, 1, 1, '#ffffff'); A.px(ctx, bx + nx, by + ny, 1, 1, col); A.px(ctx, bx + nx * 2, by + ny * 2, 1, 1, '#6a7080'); } A.line(ctx, x - Math.cos(a) * 3 * d, y - Math.sin(a) * 3, x + Math.cos(a) * 3 * d, y + Math.sin(a) * 3, '#3a2e24', 2); };
   AW.metal = {
     color: '#9ab8e0', up: '#ffd34d', status: 'shatter', fx: 'filings', block: ['Tower Shield', 'wall'],
-    icons: ['chainblade', 'gatling', 'carousel', 'drill', 'anvil'],
+    icons: ['gatling', 'carousel', 'drill', 'grenade', 'anvil'],
     look: { fx(ctx, F) { if (Math.floor(F.t * 3) % 4 === 0) { const c = F.at('chest'); F.A.px(ctx, c.x + F.d * 2, c.y - 2 + ((F.t * 20) % 4), 1, 1, '#ffffff'); } } },
     idle: { pose: (t) => IDLE.blade(t), fx(ctx, F) { const h = F.at('handF'); BLADE(ctx, F.A, h.x, h.y, 0.35, F.d, 16, '#9ab8e0'); } },
     run: {
@@ -243,18 +336,38 @@
     },
     m1: {
       name: 'Chainblade', dmg: 9, cd: 0.4, kind: 'custom', life: 0.36,
-      desc: 'Whip out a bladed chain that lashes forward and snaps back.',
+      desc: 'Whip out a heavy bladed chain that lashes forward and snaps back.',
       spawn(e, g, A) { A.sfx('swing', { minGap: 0.04 }); },
-      update(e, dt, g, A) { H.at(e, A, 4, -1); const k = e.t < 0.14 ? e.t / 0.14 : Math.max(0, 1 - (e.t - 0.14) / 0.22), L = 56 * H.sc(e) * k; e.L = L; A.hit(e, { x: e.dir > 0 ? e.x + L - 8 : e.x - L, y: e.y - 5, w: 8, h: 10 }, { kb: 0.6 }); },
-      draw(e, ctx, ox, oy, A) { const x = e.x + ox, y = e.y + oy, L = e.L || 0, d = e.dir; for (let i = 0; i < L; i += 3) A.px(ctx, x + d * i, y + Math.sin(i * 0.3 + e.t * 30) * (1 - i / Math.max(1, L)) * 2, 2, 1, i % 6 ? '#6a7080' : '#c8d8f0'); BLADE(ctx, A, x + d * L, y, 0, d, 9, '#9ab8e0'); },
+      update(e, dt, g, A) { H.at(e, A, 4, -1); const k = e.t < 0.14 ? e.t / 0.14 : Math.max(0, 1 - (e.t - 0.14) / 0.22), L = 58 * H.sc(e) * k; e.L = L; A.hit(e, { x: e.dir > 0 ? e.x + L - 12 : e.x - L, y: e.y - 7, w: 12, h: 14 }, { kb: 0.6, onHit(t) { const c = A.center(t); sparks(A, e, c.x, c.y, 4); } }); },
+      draw(e, ctx, ox, oy, A) {
+        const x = e.x + ox, y = e.y + oy, L = e.L || 0, d = e.dir;
+        for (let i = 0; i < L; i += 4) { const wy = y + Math.sin(i * 0.3 + e.t * 30) * (1 - i / Math.max(1, L)) * 3, lx = x + d * i - (d < 0 ? 3 : 0); A.px(ctx, lx, wy - 1, 3, 3, (i / 4) % 2 ? '#6a7080' : '#c8d8f0'); A.px(ctx, lx + 1, wy, 1, 1, '#2a2a3a'); }
+        BLADE(ctx, A, x + d * L, y, 0, d, 14, '#9ab8e0');
+        if (e.t > 0.1 && e.t < 0.22) W.smear(ctx, A, x + d * (L - 6), y, 12, d, (e.t - 0.1) / 0.12, '#c8d8f0', 3, -1.4, 1.4);
+      },
     },
     s: [
       {
         name: 'Gatling Arm', dmg: 4, cd: 7, mp: 6, kind: 'custom', life: 1.1,
-        desc: 'Your arm becomes a spinning gatling gun. BRRRRT.',
+        desc: 'Your arm becomes a big spinning gatling gun. BRRRRRRT.',
         spawn(e, g, A) { e.n = 0; A.sfx('energyCharge'); },
-        update(e, dt, g, A) { H.at(e, A, 10, 0); const p = A.p; p.vx *= 0.5; if (e.t > 0.15) { const want = Math.floor((e.t - 0.15) / (e.up ? 0.04 : 0.055)) + 1; while (e.n < want) { e.n++; A.spawn(e, H.proj((b, ctx, ox, oy, A) => { A.px(ctx, b.x + ox - 2, b.y + oy, 4, 1, '#ffd34d'); A.px(ctx, b.x + ox + Math.sign(b.vx), b.y + oy, 1, 1, '#ffffff'); }, { life: 0.6, r: 2 }), { x: e.x + e.dir * 6, y: e.y + A.rnd(-1.5, 1.5), vx: e.dir * 420, vy: A.rnd(-20, 20) }); A.sfx('tick', { value: 120, minGap: 0.03 }); sparks(A, e, e.x + e.dir * 8, e.y, 1); } } },
-        draw(e, ctx, ox, oy, A) { const x = e.x + ox, y = e.y + oy, d = e.dir; A.px(ctx, d > 0 ? x - 4 : x - 8, y - 3, 12, 6, '#6a7080'); for (let i = 0; i < 3; i++) A.px(ctx, x + d * 6, y - 2 + ((i + Math.floor(e.t * 40)) % 3) * 2, d * 6 > 0 ? 6 : -6, 1, '#c8d8f0'); if (e.t > 0.15 && Math.floor(e.t * 40) % 2) A.disc(ctx, x + d * 13, y, 2, '#ffd34d', '#ffffff'); },
+        update(e, dt, g, A) {
+          H.at(e, A, 10, 0); const p = A.p; p.vx *= 0.5;
+          if (e.t <= 0.15) return;
+          const want = Math.floor((e.t - 0.15) / (e.up ? 0.04 : 0.055)) + 1;
+          while (e.n < want) {
+            e.n++;
+            A.spawn(e, H.proj((b, ctx, ox, oy, A) => { const x = b.x + ox, y = b.y + oy, d = Math.sign(b.vx) || 1; A.alpha(ctx, 0.4, () => A.px(ctx, d > 0 ? x - 10 : x + 1, y - 1, 10, 3, '#ffd34d')); A.px(ctx, d > 0 ? x - 8 : x + 1, y, 8, 1, '#ffd34d'); A.px(ctx, x, y, 2, 1, '#ffffff'); }, { life: 0.6, r: 3, onHit(b, A) { sparks(A, b, b.x, b.y, 2); } }), { x: e.x + e.dir * 22, y: e.y + A.rnd(-1.5, 1.5), vx: e.dir * 440, vy: A.rnd(-22, 22) });
+            A.g.fx.add({ x: e.x + e.dir * 4, y: e.y - 3, vx: -e.dir * A.rnd(30, 80), vy: A.rnd(-120, -60), ay: 400, life: 0.5, color: '#ffd34d', size: 1, fadeOut: 0.2 });
+            A.sfx('tick', { value: 120, minGap: 0.03 }); sparks(A, e, e.x + e.dir * 22, e.y, 1);
+          }
+        },
+        draw(e, ctx, ox, oy, A) {
+          const x = e.x + ox, y = e.y + oy, d = e.dir, spin = Math.floor(e.t * 40);
+          A.px(ctx, d > 0 ? x - 6 : x - 10, y - 4, 16, 8, '#4a5060'); A.px(ctx, d > 0 ? x - 6 : x - 10, y - 4, 16, 1, '#8a98b0');
+          for (let i = 0; i < 3; i++) A.px(ctx, d > 0 ? x + 10 : x - 20, y - 3 + ((i + spin) % 3) * 2.5, 10, 1, i === 0 ? '#ffffff' : '#c8d8f0');
+          if (e.t > 0.15 && spin % 2) { A.disc(ctx, x + d * 22, y, 4, '#ffd34d', '#ffffff'); for (let i = 0; i < 4; i++) { const a = (i - 1.5) * 0.5; A.line(ctx, x + d * 24, y, x + d * (24 + Math.cos(a) * 8), y + Math.sin(a) * 8, '#ffe95a'); } }
+        },
       },
       {
         name: 'Blade Carousel', dmg: 12, cd: 8, mp: 7, kind: 'custom', life: 1.6,
@@ -265,15 +378,43 @@
       },
       {
         name: 'Drill Charge', dmg: 6, cd: 7, mp: 6, kind: 'custom', life: 0.65,
-        desc: 'Your arm becomes a drill. Charge forward, grinding through everything in the way.',
+        desc: 'Your arm becomes a huge drill. Charge forward grinding through everything in the way, then blow it all apart.',
         spawn(e, g, A) { const p = A.p; e.dir = p.facing; p.vx = e.dir * 220; p.lungeT = 0.55; p.dashGrace = 0.6; A.sfx('rumble', { dur: 0.6 }); },
-        update(e, dt, g, A) { const p = A.p; e.x = p.cx + e.dir * 10; e.y = p.y + 10; A.tick(e, { x: e.x - 6, y: e.y - 6, w: 14, h: 12 }, 0.08, { kb: 0.4, dir: e.dir }); if (Math.random() < dt * 30) sparks(A, e, e.x + e.dir * 8, e.y, 1); },
-        draw(e, ctx, ox, oy, A) { const x = e.x + ox, y = e.y + oy, d = e.dir; for (let i = 0; i < 12; i++) { const w = Math.max(1, 5 - i * 0.4); A.px(ctx, x + d * i, y - w, 1, w * 2, (i + Math.floor(e.t * 40)) % 3 ? '#8a98b0' : '#c8d8f0'); } A.px(ctx, x + d * 12, y, 1, 1, '#ffffff'); },
+        update(e, dt, g, A) {
+          const p = A.p; e.x = p.cx + e.dir * 12; e.y = p.y + 10;
+          A.tick(e, { x: e.dir > 0 ? e.x - 4 : e.x - 18, y: e.y - 8, w: 22, h: 16 }, 0.08, { kb: 0.4, dir: e.dir });
+          if (Math.random() < dt * 40) sparks(A, e, e.x + e.dir * 14, e.y, 1);
+          if (e.t > 0.55 && !e.end) { e.end = true; W.boom(A, e, e.x + e.dir * 14, e.y, 26 * H.sc(e), { mult: 2.5 }); sparks(A, e, e.x + e.dir * 14, e.y, 10); }
+        },
+        draw(e, ctx, ox, oy, A) {
+          const x = e.x + ox, y = e.y + oy, d = e.dir, s = H.sc(e), n = 18 * s, rot = Math.floor(e.t * 50);
+          for (let i = 0; i < n; i++) { const w = Math.max(1, 7 * s - i * 0.38); A.px(ctx, x + d * i, y - w, 1, w * 2, (i + rot) % 4 < 2 ? '#8a98b0' : '#c8d8f0'); if ((i + rot) % 4 === 0) A.px(ctx, x + d * i, y - w, 1, 1, '#ffffff'); }
+          A.px(ctx, x + d * n, y, 1, 1, '#ffffff');
+          for (let i = 0; i < 4; i++) A.px(ctx, x - d * (4 + i * 5) - (d > 0 ? 4 : 0), y - 6 + ((e.t * 90 + i * 7) % 12), 4, 1, '#c8d8f0');
+        },
       },
       {
         name: 'Shrapnel Grenade', dmg: 8, cd: 7, mp: 6, kind: 'custom', life: 0.01,
-        desc: 'Lob a grenade. It bounces once... then bursts into a spray of razor shrapnel.',
-        spawn(e, g, A) { H.at(e, A, 6, -6); A.sfx('swing'); A.spawn(e, { life: 1.6, spawn(b) { b.vx = b.dir * 150; b.vy = -170; b.b = 0; }, update(b, dt, g, A) { b.vy += 420 * dt; b.x += b.vx * dt; const ny = b.y + b.vy * dt, gy = A.ground(b.x, b.y - 4); if (ny + 2 > gy && b.vy > 0) { b.y = gy - 2; b.vy = -b.vy * 0.5; b.vx *= 0.7; b.b++; A.sfx('hitMetal', { minGap: 0.05 }); } else b.y = ny; if (b.b >= 2 || b.t > 1.2) { A.sfx('boom'); A.hitR(b, b.x, b.y - 4, 18, { mult: 1.4, kb: 1 }); for (let i = 0; i < (b.up ? 16 : 12); i++) { const a = -Math.PI + (i / 11) * Math.PI; A.spawn(b, H.proj((s, ctx, ox, oy, A) => A.px(ctx, s.x + ox, s.y + oy, 2, 1, '#c8d8f0'), { life: 0.5, r: 2 }), { x: b.x, y: b.y - 4, vx: Math.cos(a) * 260, vy: Math.sin(a) * 260 }); } b.dead = true; } }, draw(b, ctx, ox, oy, A) { A.disc(ctx, b.x + ox, b.y + oy, 3, '#4a5a3a', '#6a7a5a'); A.px(ctx, b.x + ox - 1, b.y + oy - 4, 2, 1, '#c8d8f0'); if (Math.floor(b.t * 10) % 2) A.px(ctx, b.x + ox, b.y + oy - 5, 1, 1, '#ff3a3a'); } }, {}); },
+        desc: 'Lob a grenade. It bounces once... then blows up in a spray of razor shrapnel.',
+        spawn(e, g, A) {
+          H.at(e, A, 6, -6); A.sfx('swing');
+          A.spawn(e, {
+            life: 1.6,
+            spawn(b) { b.vx = b.dir * 150; b.vy = -170; b.b = 0; },
+            update(b, dt, g, A) {
+              b.vy += 420 * dt; b.x += b.vx * dt;
+              const ny = b.y + b.vy * dt, gy = A.ground(b.x, b.y - 4);
+              if (ny + 2 > gy && b.vy > 0) { b.y = gy - 2; b.vy = -b.vy * 0.5; b.vx *= 0.7; b.b++; A.sfx('hitMetal', { minGap: 0.05 }); } else b.y = ny;
+              if (A.targets().some((t) => Phys().rectsOverlap(t.box, { x: b.x - 3, y: b.y - 3, w: 6, h: 6 }))) b.b = 2;   // it also goes off on contact
+              if (b.b < 2 && b.t <= 1.2) return;
+              W.boom(A, b, b.x, b.y - 4, 34 * H.sc(b), { mult: 1.6 });
+              const n = b.up ? 18 : 14;
+              for (let i = 0; i < n; i++) { const a = -Math.PI + (i / (n - 1)) * Math.PI; A.spawn(b, H.proj((s, ctx, ox, oy, A) => { A.px(ctx, s.x + ox - 1, s.y + oy - 1, 3, 2, '#c8d8f0'); A.px(ctx, s.x + ox, s.y + oy - 1, 1, 1, '#ffffff'); }, { life: 0.5, r: 3 }), { x: b.x, y: b.y - 4, vx: Math.cos(a) * 270, vy: Math.sin(a) * 270 }); }
+              b.dead = true;
+            },
+            draw(b, ctx, ox, oy, A) { A.disc(ctx, b.x + ox, b.y + oy, 4, '#4a5a3a', '#6a7a5a'); A.px(ctx, b.x + ox - 1, b.y + oy - 5, 3, 1, '#c8d8f0'); if (Math.floor(b.t * 12) % 2) { A.px(ctx, b.x + ox, b.y + oy - 6, 1, 1, '#ff3a3a'); A.alpha(ctx, 0.5, () => A.disc(ctx, b.x + ox, b.y + oy - 6, 2, '#ff3a3a')); } },
+          }, {});
+        },
       },
       {
         name: 'Anvil Drop', dmg: 40, cd: 9, mp: 7, kind: 'custom', life: 1.2,
@@ -312,7 +453,7 @@
               A.px(ctx, x - 10, gy - 104 * rise, 20, 14, '#8a98b0'); A.px(ctx, x - 6, gy - 99 * rise, 4, 2, '#ff3a3a'); A.px(ctx, x + 2, gy - 99 * rise, 4, 2, '#ff3a3a');
               const cx = x + d * 30, cy = gy - 64;
               A.px(ctx, d > 0 ? cx : cx - 34, cy - 7, 34, 14, '#4a5060'); A.px(ctx, d > 0 ? cx : cx - 34, cy - 7, 34, 2, '#8a98b0');
-              if (e.beam && e.t < 3.0) { const w = 40 * (1 - (e.t - 2.4) / 0.6) + 6, L = 460; A.px(ctx, d > 0 ? cx + 34 : cx - 34 - L, cy - w / 2, L, w, '#9ab8e0'); A.px(ctx, d > 0 ? cx + 34 : cx - 34 - L, cy - w / 4, L, w / 2, '#ffffff'); A.disc(ctx, cx + d * 34, cy, Math.round(w * 0.6), '#ffffff'); }
+              if (e.beam && e.t < 3.0) { const w = 40 * (1 - (e.t - 2.4) / 0.6) + 6, L = Math.max(460, view(A).width); A.px(ctx, d > 0 ? cx + 34 : cx - 34 - L, cy - w / 2, L, w, '#9ab8e0'); A.px(ctx, d > 0 ? cx + 34 : cx - 34 - L, cy - w / 4, L, w / 2, '#ffffff'); A.disc(ctx, cx + d * 34, cy, Math.round(w * 0.6), '#ffffff'); }
               for (let i = 0; i < 4; i++) A.px(ctx, x - 20 + i * 12, gy - 112 * rise - ((e.t * 40 + i * 9) % 10), 2, 4, '#9ab8e0');
             });
           },
@@ -326,7 +467,7 @@
   const grains = (A, e, x, y, n, sp) => { for (let i = 0; i < n; i++) A.spawn(e, GRAIN, { x, y, vx: A.rnd(-1, 1) * (sp || 100), vy: A.rnd(-140, 10), c: i % 3 ? '#ffb84a' : '#fff0c0' }); };
   AW.sand = {
     color: '#ffb84a', up: '#ff6a3a', status: 'slow', fx: 'dust', block: ['Sand Golem Hand', 'wall'],
-    icons: ['scimitar', 'worm', 'sphinx', 'desertSpears', 'scorpion'],
+    icons: ['worm', 'sphinx', 'desertSpears', 'scorpion', 'burrow'],
     look: { fx(ctx, F) { const e = F.at('eye'); F.A.px(ctx, e.x, e.y, 1, 1, '#ffd84a'); for (let i = 0; i < 8; i++) { const a = F.t * 3 + i * 0.8; F.A.px(ctx, F.x + Math.cos(a) * (8 + (i % 3)), F.y - 4 - i * 2.4, 1, 1, i % 2 ? '#ffb84a' : '#fff0c0'); } } },
     idle: { pose: (t) => IDLE.regal(t) },
     run: {
@@ -346,10 +487,16 @@
     },
     m1: {
       name: 'Sand Scimitar', dmg: 9, cd: 0.36, kind: 'custom', life: 0.3,
-      desc: 'Slash with a curved blade of hardened sand that crumbles into a cloud of grit.',
-      spawn(e, g, A) { A.sfx('swing', { minGap: 0.04 }); },
-      update(e, dt, g, A) { H.at(e, A, 0); H.melee(e, A, 32 * H.sc(e), 24, { onHit(t) { const c = A.center(t); grains(A, e, c.x, c.y, 5); } }); },
-      draw(e, ctx, ox, oy, A) { const k = Math.min(1, e.t / 0.12), x = e.x + ox, y = e.y + oy, d = e.dir, R = 24 * H.sc(e), a = U.lerp(-1.6, 1, W.easeOut(k)); A.alpha(ctx, 1 - Math.max(0, e.t - 0.12) / 0.18, () => { for (let i = 0; i < 16; i++) { const b = a - i * 0.07, r = R - Math.abs(i - 8) * 0.4; A.px(ctx, x + Math.cos(b) * r * d, y + Math.sin(b) * r, 2, 1, i < 2 ? '#ffffff' : '#ffb84a'); } }); },
+      desc: 'Slash with a big curved blade of hardened sand that crumbles into a cloud of grit.',
+      spawn(e, g, A) { A.sfx('swing', { minGap: 0.04 }); const p = A.p; grains(A, e, p.cx + p.facing * 18, p.y + 10, 4, 60); },
+      update(e, dt, g, A) { H.at(e, A, 0); H.melee(e, A, 34 * H.sc(e), 26, { onHit(t) { const c = A.center(t); grains(A, e, c.x, c.y, 6); } }); },
+      draw(e, ctx, ox, oy, A) {
+        const k = Math.min(1, e.t / 0.12), x = e.x + ox, y = e.y + oy, d = e.dir, R = 24 * H.sc(e);
+        A.alpha(ctx, 1 - Math.max(0, e.t - 0.12) / 0.18, () => {
+          W.smear(ctx, A, x, y, R, d, k * 0.8, '#ffb84a', 5, -1.6, 1.0);
+          for (let i = 0; i < 8; i++) { const b = U.lerp(-1.6, 1.0, i / 8), r = R + 2 + (i % 3); if (i / 8 < k) A.px(ctx, x + Math.cos(b) * r * d, y + Math.sin(b) * r + ((e.t * 60 + i * 3) % 5), 1, 1, '#fff0c0'); }
+        });
+      },
     },
     s: [
       {
@@ -382,10 +529,24 @@
       },
       {
         name: 'Burrow Strike', dmg: 22, cd: 8, mp: 6, kind: 'custom', life: 0.9,
-        desc: 'Dive into the sand and burst out right under the nearest enemy with an uppercut.',
+        desc: 'Dive into the sand, tunnel under the nearest enemy and burst out in a geyser of sand with an uppercut.',
         spawn(e, g, A) { const p = A.p, t = A.near(p.cx, p.y, 170); e.from = p.cx; e.gy = p.feet; e.tg = t; grains(A, e, p.cx, p.feet - 2, 12); A.sfx('rumble', { dur: 0.3 }); p.dashGrace = 0.6; },
-        update(e, dt, g, A) { const p = A.p; if (e.t > 0.35 && !e.up2) { e.up2 = true; if (e.tg && !e.tg.dead) { const c = A.center(e.tg), nx = c.x - p.w / 2; if (!Phys().overlapsSolid(g.level, nx, p.y, p.w, p.h)) p.x = nx; } p.vy = -260; grains(A, e, p.cx, p.feet - 2, 16, 140); A.hitR(e, p.cx, p.y + 10, 18, { kb: 0.4, onHit(t) { if (t.applyStatus) t.applyStatus('launch', 0); } }); A.sfx('crash'); e.to = p.cx; } },
-        draw(e, ctx, ox, oy, A) { const gy = e.gy + oy; if (!e.up2) { const k = e.t / 0.35; A.px(ctx, e.from + ox - 6, gy - 1, 12, 2, '#c88a2a'); for (let i = 0; i < 4; i++) A.px(ctx, e.from + ox - 5 + i * 3, gy - 2 - Math.abs(Math.sin(e.t * 30 + i)) * 3, 1, 1, '#fff0c0'); void k; } else { const k = (e.t - 0.35) / 0.55; A.alpha(ctx, 1 - k, () => A.ring(ctx, e.to + ox, gy - 2, 4 + k * 20, '#ffb84a', 2 + k * 4)); } },
+        update(e, dt, g, A) {
+          const p = A.p;
+          if (e.t <= 0.35 || e.up2) return;
+          e.up2 = true;
+          if (e.tg && !e.tg.dead) { const c = A.center(e.tg), nx = c.x - p.w / 2; if (!Phys().overlapsSolid(g.level, nx, p.y, p.w, p.h)) p.x = nx; }
+          p.vy = -280; grains(A, e, p.cx, p.feet - 2, 22, 160);
+          A.hitR(e, p.cx, p.y + 10, 22 * H.sc(e), { kb: 0.4, onHit(t) { if (t.applyStatus) t.applyStatus('launch', 0); } });
+          W.boom(A, e, p.cx, p.feet - 6, 30 * H.sc(e), { mult: 0.6, flat: 0.5 });
+          A.sfx('crash'); e.to = p.cx;
+        },
+        draw(e, ctx, ox, oy, A) {
+          const gy = e.gy + oy;
+          if (!e.up2) { const k = Math.min(1, e.t / 0.35), tx = e.tg && !e.tg.dead ? A.center(e.tg).x : e.from, mx = U.lerp(e.from, tx, k) + ox; A.px(ctx, mx - 8, gy - 3, 16, 3, '#c88a2a'); A.px(ctx, mx - 5, gy - 5, 10, 2, '#ffb84a'); for (let i = 0; i < 6; i++) A.px(ctx, mx - 7 + i * 3, gy - 6 - Math.abs(Math.sin(e.t * 30 + i)) * 4, 1, 1, '#fff0c0'); return; }
+          const k = (e.t - 0.35) / 0.55, x = e.to + ox, h = 50 * H.sc(e) * Math.min(1, k * 6);
+          A.alpha(ctx, 1 - k, () => { for (let yy = 0; yy < h; yy++) { const w = 6 + (yy / Math.max(1, h)) * 6 + Math.sin(yy * 0.5 + e.t * 30) * 1.5; A.px(ctx, x - w, gy - yy, w * 2, 1, (yy + Math.floor(e.t * 50)) % 5 < 2 ? '#fff0c0' : '#ffb84a'); } });
+        },
       },
     ],
     ult: {
@@ -399,24 +560,43 @@
       run(A, e0) {
         const p = A.p;
         A.spawn(e0, {
-          life: 3.8, layer: 'screen',
-          spawn(e) { e.ts = H.nearby(A, p.cx, p.y, 340).map((o) => o.t); const c = e.ts[0] ? A.center(e.ts[0]) : { x: p.cx + e.dir * 100, y: p.y }; e.cx = c.x; e.gy = A.ground(c.x, p.y + 2); e.tw = [-1, 1].map((s) => ({ x: c.x + s * 90, s })); e.st = 0; e.blades = []; A.sfx('rumble', { dur: 3.2 }); A.sfx('whoosh'); },
+          life: 4, layer: 'screen',
+          spawn(e) { e.ts = H.nearby(A, p.cx, p.y, 340).map((o) => o.t); const c = e.ts[0] ? A.center(e.ts[0]) : { x: p.cx + e.dir * 100, y: p.y }; e.cx = c.x; e.gy = A.ground(c.x, p.y + 2); e.tw = [-1, 1].map((s) => ({ x: c.x + s * 120, s })); e.st = 0; e.blades = []; e.dust = []; A.sfx('rumble', { dur: 3.4 }); A.sfx('whoosh'); },
           update(e, dt, g, A) {
             e.st -= dt; for (const b of e.blades) b.t += dt;
-            for (const t of e.tw) { t.x = U.approach(t.x, e.cx + t.s * 30, 0.8, dt); A.tick(e, { x: t.x - 16, y: e.gy - 80, w: 32, h: 80 }, 0.2, { mult: 0.5, kb: 0 }); }
-            if (e.t > 0.4 && e.t < 2.6 && e.st <= 0) { e.st = 0.1; const y = e.gy - A.rnd(10, 60), d = Math.random() < 0.5 ? 1 : -1; e.blades.push({ y, d, t: 0 }); A.hit(e, { x: p.cx - 320, y: y - 4, w: 640, h: 8 }, { mult: 0.6, kb: 0.2 }); e.hit.clear(); }
+            for (const d of e.dust) { d.t += dt; d.vy += 300 * dt; d.x += d.vx * dt; d.y += d.vy * dt; }
+            e.dust = e.dust.filter((d) => d.t < 1.4);
+            // two great twisters closing in
+            for (const t of e.tw) { t.x = U.approach(t.x, e.cx + t.s * 34, 0.8, dt); A.tick(e, { x: t.x - 24, y: e.gy - 140, w: 48, h: 140 }, 0.2, { mult: 0.5, kb: 0 }); }
+            // blades of compressed sand slicing across the whole storm
+            if (e.t > 0.4 && e.t < 2.7 && e.st <= 0) { e.st = 0.1; const y = e.gy - A.rnd(10, 70), d = Math.random() < 0.5 ? 1 : -1; e.blades.push({ y, d, t: 0 }); A.hit(e, { x: p.cx - 320, y: y - 5, w: 640, h: 10 }, { mult: 0.6, kb: 0.2 }); e.hit.clear(); }
             for (const t of e.ts) if (!t.dead && t.applyStatus && !t.status.blind) t.applyStatus('blind', 0);
-            if (e.t > 2.8 && !e.boom) { e.boom = true; A.blast(e, e.cx, e.gy - 30, 110 * H.sc(e), { dmg: e.dmg * 7 }); A.flash(0.3); A.shake(10, 0.5); A.sfx('crash'); }
+            // a colossal sand wyrm bursts up under them
+            if (e.t > 1 && !e.wyrm) { e.wyrm = e.t; A.hitR(e, e.cx, e.gy - 30, 40, { mult: 2, kb: 1 }); e.hit.clear(); A.sfx('crash'); A.shake(8, 0.4); for (let i = 0; i < 30; i++) e.dust.push({ x: e.cx + A.rnd(-20, 20), y: e.gy, vx: A.rnd(-160, 160), vy: A.rnd(-260, -60), t: 0 }); }
+            // ...and the whole storm collapses onto them
+            if (e.t > 2.9 && !e.boom) { e.boom = e.t; A.blast(e, e.cx, e.gy - 30, 140 * H.sc(e), { dmg: e.dmg * 8 }); A.flash(0.35); A.shake(14, 0.6); A.sfx('crash'); A.sfx('boom'); for (let i = 0; i < 50; i++) e.dust.push({ x: e.cx, y: e.gy - 10, vx: A.rnd(-300, 300), vy: A.rnd(-300, -40), t: 0 }); }
           },
           draw(e, ctx, ox, oy, A) {
-            const f = e.t > 3.2 ? 1 - (e.t - 3.2) / 0.6 : Math.min(1, e.t * 3);
-            A.alpha(ctx, 0.45 * f, () => A.px(ctx, -10, -10, 2000, 2000, '#c88a2a'));
-            A.alpha(ctx, f, () => { for (let i = 0; i < 90; i++) { const yy = -10 + ((i * 37) % 300), xx = ((e.t * 300 + i * 67) % 700) - 100; A.px(ctx, xx, yy, 6, 1, i % 3 ? '#ffb84a' : '#fff0c0'); } });
-            for (const t of e.tw) { const x = t.x + ox, gy = e.gy + oy; A.alpha(ctx, f, () => { for (let i = 0; i < 60; i++) { const q = i / 60, a = e.t * 9 + i * 0.6, r = 4 + q * 16; A.px(ctx, x + Math.cos(a) * r, gy - q * 80, 2, 1, i % 3 ? '#e0a040' : '#fff0c0'); } }); }
-            for (const b of e.blades) if (b.t < 0.2) A.alpha(ctx, f * (1 - b.t / 0.2), () => { const x0 = b.d > 0 ? -10 + b.t * 3000 : 500 - b.t * 3000; A.px(ctx, x0, b.y + oy - 1, 60, 2, '#fff0c0'); A.px(ctx, x0, b.y + oy, 60, 1, '#ffffff'); });
-            // a giant sand creature rises in the middle
-            const rise = U.clamp((e.t - 0.8) / 0.6, 0, 1); if (rise > 0 && !e.boom) { const x = e.cx + ox, gy = e.gy + oy, top = gy - 70 * rise; A.alpha(ctx, f * 0.85, () => { A.disc(ctx, x, top + 14, 14, '#c88a2a'); A.px(ctx, x - 12, top + 14, 24, 70 * rise - 14, '#c88a2a'); A.px(ctx, x - 6, top + 10, 3, 3, '#ffd84a'); A.px(ctx, x + 3, top + 10, 3, 3, '#ffd84a'); for (let i = -8; i <= 8; i += 4) A.tri(ctx, x + i, top + 22, 3, -5, '#fff0c0'); }); }
-            if (e.boom) { const k = (e.t - 2.8) / 1; A.alpha(ctx, 1 - k, () => A.ring(ctx, e.cx + ox, e.gy + oy - 30, 20 + k * 160, '#ffb84a', (20 + k * 160) * 0.5, 2)); }
+            const V = view(A), f = e.t > 3.4 ? 1 - (e.t - 3.4) / 0.6 : Math.min(1, e.t * 3), gy = e.gy + oy;
+            A.alpha(ctx, 0.5 * f, () => A.px(ctx, -10, -10, 2000, 2000, '#c88a2a'));
+            // the storm: sand screaming across the whole screen
+            A.alpha(ctx, f, () => { for (let i = 0; i < 160; i++) { const yy = -10 + ((i * 37) % (V.height + 20)), xx = ((e.t * 420 + i * 67) % (V.width + 200)) - 100; A.px(ctx, xx, yy, 8 + (i % 3) * 4, 1, i % 3 ? '#ffb84a' : '#fff0c0'); } });
+            for (const t of e.tw) { const x = t.x + ox; A.alpha(ctx, f, () => { A.alpha(ctx, 0.3, () => { for (let yy = 0; yy < 140; yy += 2) { const r = 6 + (yy / 140) * 26; A.px(ctx, x - r, gy - yy, r * 2, 1, '#c88a2a'); } }); for (let i = 0; i < 120; i++) { const q = i / 120, a = e.t * 9 + i * 0.6, r = 6 + q * 26; A.px(ctx, x + Math.cos(a) * r, gy - q * 140, 3, 1, i % 3 ? '#e0a040' : '#fff0c0'); } }); }
+            for (const b of e.blades) if (b.t < 0.22) A.alpha(ctx, f * (1 - b.t / 0.22), () => { const x0 = b.d > 0 ? -10 + b.t * 3600 : V.width + 10 - b.t * 3600 - 80; A.px(ctx, x0, b.y + oy - 2, 80, 4, '#fff0c0'); A.px(ctx, x0, b.y + oy - 1, 80, 2, '#ffffff'); });
+            // the wyrm
+            if (e.wyrm && !e.boom) {
+              const k = Math.min(1, (e.t - e.wyrm) / 0.35), x = e.cx + ox, top = gy - 160 * k + Math.sin(e.t * 3) * 6;
+              A.alpha(ctx, f * 0.95, () => {
+                for (let yy = top + 30; yy < gy; yy += 3) { const w = 26 + Math.sin(yy * 0.08 + e.t * 4) * 3; A.px(ctx, x - w / 2 + Math.sin(yy * 0.05 + e.t * 3) * 6, yy, w, 3, (Math.floor(yy / 3) % 4) ? '#c88a2a' : '#e0a040'); }
+                A.disc(ctx, x, top + 22, 20, '#c88a2a', '#e0a040');
+                const open = 8 + Math.sin(e.t * 14) * 4;
+                A.px(ctx, x - 20, top + 6 - open, 40, 10, '#a86a1a'); A.px(ctx, x - 20, top + 28 + open, 40, 8, '#a86a1a');
+                for (let i = -16; i <= 16; i += 5) { A.tri(ctx, x + i, top + 16 - open, 3, -6, '#fff0c0'); A.tri(ctx, x + i, top + 28 + open, 3, 6, '#fff0c0'); }
+                A.px(ctx, x - 10, top + 2 - open, 4, 3, '#ff3a2a'); A.px(ctx, x + 6, top + 2 - open, 4, 3, '#ff3a2a');
+              });
+            }
+            for (const d of e.dust) A.alpha(ctx, 1 - d.t / 1.4, () => A.px(ctx, d.x + ox, d.y + oy, 2, 2, d.t < 0.3 ? '#fff0c0' : '#c88a2a'));
+            if (e.boom) { const k = (e.t - e.boom) / 1.1; A.alpha(ctx, Math.max(0, 1 - k), () => { A.disc(ctx, e.cx + ox, gy - 30, Math.round(20 + k * 60), '#e0a040', '#fff0c0'); A.ring(ctx, e.cx + ox, gy - 30, 20 + k * 200, '#ffb84a', (20 + k * 200) * 0.5, 2); A.ring(ctx, e.cx + ox, gy - 30, 10 + k * 150, '#ffffff', (10 + k * 150) * 0.5, 2); }); }
           },
         }, {});
       },
@@ -428,7 +608,7 @@
   const lavaBurst = (A, e, x, y, n, sp) => { for (let i = 0; i < n; i++) A.spawn(e, LAVA, { x, y, vx: A.rnd(-1, 1) * (sp || 90), vy: A.rnd(-260, -100), r: Math.random() < 0.3 ? 3 : 2 }); };
   AW.magma = {
     color: '#ff4a1a', up: '#ffe95a', status: 'scorch', fx: 'cinders', block: ['Magma Dome', 'bubble'],
-    icons: ['magmaKick', 'pyroclast', 'caldera', 'moltenArmor', 'magmaSlime'],
+    icons: ['pyroclast', 'caldera', 'moltenArmor', 'magmaSlime', 'heatwave'],
     look: { fx(ctx, F) { const c = F.at('chest'); if (Math.floor(F.t * 6) % 3 === 0) F.A.px(ctx, c.x - F.d, c.y, 1, 2, '#ffe95a'); F.A.alpha(ctx, 0.2, () => { for (let i = 0; i < 3; i++) F.A.px(ctx, F.x - 6 + i * 6 + Math.sin(F.t * 6 + i) * 1.5, F.y - 28 - ((F.t * 20 + i * 5) % 8), 2, 3, '#ffb84a'); }); } },
     idle: { pose: (t) => IDLE.press(t), fx(ctx, F) { for (const h of ['handF', 'handB']) { const p = F.at(h); F.A.px(ctx, p.x - 1, p.y, 3, 2, '#ff4a1a'); F.A.px(ctx, p.x, p.y, 1, 1, '#ffe95a'); if (Math.sin(F.t * 4 + (h === 'handF' ? 0 : 3)) > 0.8) F.A.px(ctx, p.x, p.y + 3 + ((F.t * 30) % 5), 1, 2, '#ff8a2a'); } } },
     run: {
@@ -447,10 +627,17 @@
     },
     m1: {
       name: 'Magma Kick', dmg: 10, cd: 0.38, kind: 'custom', life: 0.28,
-      desc: 'A molten kick combo: low kick, high kick, then an axe kick that splashes lava.',
-      spawn(e, g, A) { const p = A.p; p._mkick = ((p._mkick || 0) + 1) % 3; e.n = p._mkick; A.sfx(e.n === 0 ? 'crash' : 'swing', { minGap: 0.04 }); },
-      update(e, dt, g, A) { H.at(e, A, 0); const y = e.n === 1 ? 6 : e.n === 2 ? -8 : 0; A.hit(e, { x: e.dir > 0 ? e.x : e.x - 32 * H.sc(e), y: e.y + y - 10, w: 32 * H.sc(e), h: 20 }, { mult: e.n === 0 ? 1.6 : 1, kb: e.n === 0 ? 1.4 : 0.6, onHit(t) { if (e.n === 0) { const c = A.center(t); lavaBurst(A, e, c.x, c.y, 5, 60); } } }); },
-      draw(e, ctx, ox, oy, A) { const k = Math.min(1, e.t / 0.1), x = e.x + ox, y = e.y + oy, d = e.dir, f = 1 - Math.max(0, e.t - 0.1) / 0.18; A.alpha(ctx, f, () => { if (e.n === 1) A.arc(ctx, x, y + 6, 20, d, '#ff4a1a', 2, 0.2, U.lerp(0.2, 1, k)); else if (e.n === 2) A.arc(ctx, x, y - 4, 22, d, '#ff8a2a', 2, -1.4, U.lerp(-1.4, -0.2, k)); else { A.arc(ctx, x, y - 10, 24, d, '#ffe95a', 3, -1.8, U.lerp(-1.8, 0.8, k)); A.disc(ctx, x + d * 18, y + 8, Math.round(3 * k), '#ff4a1a', '#ffe95a'); } }); },
+      desc: 'A molten kick combo: low kick, high kick, then an axe kick that splashes lava across the ground.',
+      spawn(e, g, A) { const p = A.p; p._mkick = ((p._mkick || 0) + 1) % 3; e.n = p._mkick; A.sfx(e.n === 0 ? 'crash' : 'swing', { minGap: 0.04 }); if (e.n === 0) { const fx = p.cx + p.facing * 20; lavaBurst(A, e, fx, p.feet - 2, 6, 80); A.spawn(e, W.SHOCK, { x: fx, y: p.feet - 2, r: 18, flat: 0.45, dmg: 0 }); A.shake(2, 0.1); } },
+      update(e, dt, g, A) { H.at(e, A, 0); const y = e.n === 1 ? 6 : e.n === 2 ? -8 : 0, L = 34 * H.sc(e); A.hit(e, { x: e.dir > 0 ? e.x : e.x - L, y: e.y + y - 11, w: L, h: 22 }, { mult: e.n === 0 ? 1.6 : 1, kb: e.n === 0 ? 1.4 : 0.6, onHit(t) { if (e.n === 0) { const c = A.center(t); lavaBurst(A, e, c.x, c.y, 5, 60); } } }); },
+      draw(e, ctx, ox, oy, A) {
+        const k = Math.min(1, e.t / 0.1), x = e.x + ox, y = e.y + oy, d = e.dir, f = 1 - Math.max(0, e.t - 0.1) / 0.18;
+        A.alpha(ctx, f, () => {
+          if (e.n === 1) W.smear(ctx, A, x, y + 6, 22, d, k * 0.8, '#ff4a1a', 4, 0.2, 1.1);
+          else if (e.n === 2) W.smear(ctx, A, x, y - 4, 24, d, k * 0.8, '#ff8a2a', 4, -1.4, -0.1);
+          else { W.smear(ctx, A, x, y - 10, 28, d, k * 0.8, '#ffe95a', 6, -1.8, 0.9); A.disc(ctx, x + d * 20, y + 8, Math.max(1, Math.round(5 * k)), '#ff4a1a', '#ffe95a'); }
+        });
+      },
     },
     s: [
       {
@@ -469,10 +656,15 @@
       },
       {
         name: 'Molten Armor', dmg: 4, cd: 15, mp: 6, kind: 'custom', life: 6,
-        desc: 'Coat yourself in molten rock: you take less damage, and anything that touches you burns.',
-        spawn(e, g, A) { const p = A.p; p.ab.buffs.armor = { t: e.life * (e.up ? 1.3 : 1), up: e.up, pal: e.pal }; A.g.floatText(p.cx, p.y - 10, 'MOLTEN ARMOR', e.pal.l); A.sfx('ignite'); },
+        desc: 'Erupt into a coat of molten rock: the eruption scorches everything near you, you take less damage, and anything that touches you burns.',
+        spawn(e, g, A) { const p = A.p; p.ab.buffs.armor = { t: e.life * (e.up ? 1.3 : 1), up: e.up, pal: e.pal }; A.g.floatText(p.cx, p.y - 10, 'MOLTEN ARMOR', e.pal.l); A.sfx('ignite'); W.boom(A, e, p.cx, p.y + 12, 38 * H.sc(e), { mult: 3.5 }); lavaBurst(A, e, p.cx, p.y + 10, 10, 120); },
         update(e, dt, g, A) { const p = A.p; e.x = p.cx; e.y = p.y; if (!p.ab.buffs.armor) { e.dead = true; return; } A.tick(e, { x: p.x - 4, y: p.y, w: p.w + 8, h: p.h }, 0.4, { kb: 0.6 }); },
-        draw(e, ctx, ox, oy, A) { const x = e.x + ox, y = e.y + oy; for (let i = 0; i < 7; i++) { const yy = y + 2 + i * 3, w = 10 - Math.abs(i - 3); A.alpha(ctx, 0.5, () => A.px(ctx, x - w / 2, yy, w, 2, i % 2 ? '#3a1a10' : '#5a2a1a')); if ((i + Math.floor(e.t * 6)) % 3 === 0) A.px(ctx, x - w / 2 + 2, yy, 2, 1, '#ffe95a'); } },
+        draw(e, ctx, ox, oy, A) {
+          const x = e.x + ox, y = e.y + oy;
+          A.alpha(ctx, 0.25 + 0.1 * Math.sin(e.t * 8), () => A.disc(ctx, x, y + 11, 13, '#ff4a1a'));
+          for (let i = 0; i < 7; i++) { const yy = y + 2 + i * 3, w = 12 - Math.abs(i - 3); A.alpha(ctx, 0.6, () => A.px(ctx, x - w / 2, yy, w, 2, i % 2 ? '#3a1a10' : '#5a2a1a')); if ((i + Math.floor(e.t * 6)) % 3 === 0) A.px(ctx, x - w / 2 + 2, yy, 3, 1, '#ffe95a'); }
+          for (let i = 0; i < 4; i++) { const fx = x - 6 + i * 4, fh = 3 + Math.abs(Math.sin(e.t * 9 + i * 2)) * 4; A.px(ctx, fx, y + 2 - fh, 1, fh, i % 2 ? '#ff8a2a' : '#ffe95a'); }
+        },
       },
       {
         name: 'Magma Slime', dmg: 26, cd: 10, mp: 7, kind: 'custom', life: 4,
@@ -531,7 +723,7 @@
   const CLOUD = (ctx, A, x, y, w, col, col2) => { for (let i = 0; i < 5; i++) A.disc(ctx, x - w / 2 + (i / 4) * w, y + (i % 2) * 2, Math.round(w / 5 + (i % 2 ? 1 : 3)), col, col2); };
   AW.storm = {
     color: '#6a8aff', up: '#ffe94a', status: 'shock', fx: 'rain', block: ['Cyclone Bulwark', 'swirl'],
-    icons: ['squallFist', 'spiral', 'waterspout', 'shear', 'thunderhead'],
+    icons: ['spiral', 'waterspout', 'surfer', 'shear', 'thunderhead'],
     look: { fx(ctx, F) { const h = F.at('headTop'); CLOUD(ctx, F.A, h.x, h.y - 8, 14, '#3a4a7a', '#5a6a9a'); for (let i = 0; i < 4; i++) F.A.px(ctx, h.x - 6 + i * 4, h.y - 4 + ((F.t * 60 + i * 5) % 10), 1, 2, '#8ab0e0'); if (Math.floor(F.t * 5) % 7 === 0) BOLT(ctx, F.A, h.x + 2, h.y - 6, h.y + 4, '#ffe94a', F.t * 30); } },
     idle: { pose: (t) => IDLE.sky(t), fx(ctx, F) { for (const s of ['handF', 'handB']) { const p = F.at(s); if (Math.random() < 0.3) F.A.px(ctx, p.x + Math.round(Math.random() * 4 - 2), p.y - 2, 1, 1, '#ffe94a'); } } },
     run: {
@@ -551,10 +743,19 @@
     },
     m1: {
       name: 'Squall Fist', dmg: 9, cd: 0.36, kind: 'custom', life: 0.3,
-      desc: 'A punch wrapped in wind and rain that cracks with lightning on impact.',
+      desc: 'A punch wrapped in wind and rain that cracks with lightning on impact, arcing into whatever stands nearby.',
       spawn(e, g, A) { A.sfx('punchHit', { minGap: 0.04 }); },
-      update(e, dt, g, A) { H.at(e, A, 0); H.melee(e, A, 32 * H.sc(e), 20, { kb: 1.2, onHit(t) { e.cr = A.center(t); A.sfx('zap', { minGap: 0.05 }); } }); },
-      draw(e, ctx, ox, oy, A) { const k = e.t / e.life, x = e.x + ox + e.dir * (10 + 12 * Math.min(1, k * 4)), y = e.y + oy; A.alpha(ctx, 1 - k, () => { for (let i = 0; i < 6; i++) A.px(ctx, x - e.dir * (i * 3 + 4), y - 4 + (i % 3) * 3, 3, 1, '#c8e0ff'); A.disc(ctx, x, y, 3, '#6a8aff', '#ffffff'); if (e.cr) BOLT(ctx, A, e.cr.x + ox, e.cr.y + oy - 14, e.cr.y + oy + 6, '#ffe94a', e.t * 40); }); },
+      update(e, dt, g, A) { H.at(e, A, 0); H.melee(e, A, 32 * H.sc(e), 22, { kb: 1.2, onHit(t) { if (!e.cr) { e.cr = A.center(t); A.sfx('zap', { minGap: 0.05 }); } } }); if (e.cr && !e.arced) { e.arced = true; A.hitR(e, e.cr.x, e.cr.y, 18 * H.sc(e), { mult: 0.4, kb: 0.4 }); } },
+      draw(e, ctx, ox, oy, A) {
+        const k = e.t / e.life, d = e.dir, x = e.x + ox + d * (10 + 14 * Math.min(1, k * 4)), y = e.y + oy;
+        A.alpha(ctx, 1 - k, () => {
+          for (let i = 0; i < 8; i++) A.px(ctx, x - d * (i * 4 + 6) - (d > 0 ? 5 : 0), y - 6 + (i % 4) * 4, 5, 1, i % 2 ? '#c8e0ff' : '#ffffff');
+          A.alpha(ctx, 0.4, () => A.disc(ctx, x, y, 7, '#6a8aff'));
+          A.disc(ctx, x, y, 4, '#6a8aff', '#ffffff');
+          for (let i = 0; i < 5; i++) A.px(ctx, x - 6 + i * 3, y - 10 + ((e.t * 120 + i * 7) % 18), 1, 3, '#8ab0ff');
+          if (e.cr) { BOLT(ctx, A, e.cr.x + ox, e.cr.y + oy - 26, e.cr.y + oy + 6, '#ffe94a', e.t * 40); A.disc(ctx, e.cr.x + ox, e.cr.y + oy, Math.round(6 * (1 - k)) + 1, '#ffe94a', '#ffffff'); }
+        });
+      },
     },
     s: [
       {
@@ -580,10 +781,19 @@
       },
       {
         name: 'Wind Shear', dmg: 16, cd: 6, mp: 6, kind: 'custom', life: 1,
-        desc: 'Two crossing blades of wind, edged with lightning, scissor forward through your enemies.',
+        desc: 'Two big crossing blades of wind, edged with lightning, scissor forward through your enemies.',
         spawn(e, g, A) { H.at(e, A, 8, -2); e.sx = e.x; A.sfx('swing'); },
-        update(e, dt, g, A) { e.cx = e.sx + e.dir * 230 * e.t; const sep = Math.sin(e.t * 9) * 16; e.y1 = e.y - sep; e.y2 = e.y + sep; for (const yy of [e.y1, e.y2]) A.hit(e, { x: e.cx - 8, y: yy - 4, w: 16, h: 8 }, { kb: 0.6 }); if (A.solid(e.cx, e.y)) e.dead = true; },
-        draw(e, ctx, ox, oy, A) { if (e.cx === undefined) return; for (const yy of [e.y1, e.y2]) { A.arc(ctx, e.cx + ox, yy + oy, 9, e.dir, '#c8e0ff', 1, -1, 1); A.arc(ctx, e.cx + ox + e.dir, yy + oy, 8, e.dir, '#ffe94a', 1, -0.8, 0.8); } },
+        update(e, dt, g, A) { e.cx = e.sx + e.dir * 230 * e.t; const sep = Math.sin(e.t * 9) * 16; e.y1 = e.y - sep; e.y2 = e.y + sep; for (const yy of [e.y1, e.y2]) A.hit(e, { x: e.cx - 12, y: yy - 7, w: 24, h: 14 }, { kb: 0.6 }); if (A.solid(e.cx, e.y)) e.dead = true; },
+        draw(e, ctx, ox, oy, A) {
+          if (e.cx === undefined) return;
+          const d = e.dir;
+          for (const yy of [e.y1, e.y2]) {
+            const x = e.cx + ox, y = yy + oy;
+            W.smear(ctx, A, x, y, 14, d, 0.55, '#c8e0ff', 4, -1.2, 1.2);
+            A.arc(ctx, x + d * 2, y, 12, d, '#ffe94a', 1, -0.9, 0.9);
+            for (let i = 1; i < 4; i++) A.alpha(ctx, 0.5 - i * 0.12, () => A.px(ctx, x - d * (i * 7 + 4) - (d > 0 ? 6 : 0), y + Math.sin(e.t * 30 + i) * 2, 6, 1, '#c8e0ff'));
+          }
+        },
       },
       {
         name: 'Thunderhead', dmg: 12, cd: 14, mp: 7, kind: 'custom', life: 6,
@@ -604,29 +814,38 @@
       run(A, e0) {
         const p = A.p;
         A.spawn(e0, {
-          life: 4, layer: 'screen',
-          spawn(e) { e.ts = H.nearby(A, p.cx, p.y, 340).map((o) => o.t); e.cx = p.cx + e.dir * 60; e.gy = p.feet; e.tornados = [-1, 1].map((s) => ({ x: p.cx + s * 160, s })); e.bolts = []; e.bt = 0; A.sfx('rumble', { dur: 3.6 }); A.sfx('whoosh'); },
+          life: 4.2, layer: 'screen',
+          spawn(e) { e.ts = H.nearby(A, p.cx, p.y, 340).map((o) => o.t); e.cx = p.cx + e.dir * 60; e.gy = p.feet; e.tornados = [-1, 1].map((s) => ({ x: p.cx + s * 170, s })); e.bolts = []; e.bt = 0; A.sfx('rumble', { dur: 3.8 }); A.sfx('whoosh'); },
           update(e, dt, g, A) {
             e.bt -= dt; for (const b of e.bolts) b.t += dt;
             const grow = Math.min(1, e.t / 3);
-            for (const tn of e.tornados) { tn.x = U.approach(tn.x, e.cx + tn.s * 40 * (1 - grow), 0.6, dt); A.tick(e, { x: tn.x - 18, y: e.gy - 120, w: 36, h: 120 }, 0.2, { mult: 0.5, kb: 0 }); }
+            // the tornadoes grind in towards each other...
+            for (const tn of e.tornados) { tn.x = U.approach(tn.x, e.cx + tn.s * 40 * (1 - grow), 0.6, dt); A.tick(e, { x: tn.x - 26, y: e.gy - 170, w: 52, h: 170 }, 0.2, { mult: 0.5, kb: 0 }); }
             for (const t of e.ts) if (!t.dead && !t.tutorial) t.vx = U.approach(t.vx, Math.sin(e.t * 2 + t.uid) * 120, 3, dt);
             A.tick(e, { x: p.cx - 320, y: e.gy - 200, w: 640, h: 200 }, 0.3, { mult: 0.25 + grow * 0.25, kb: 0 });
-            if (e.t < 3.2 && e.bt <= 0) { e.bt = 0.09; const live = e.ts.filter((t) => !t.dead), t = live[Math.floor(Math.random() * Math.max(1, live.length))]; const x = t ? A.center(t).x : p.cx + A.rnd(-240, 240), gy = A.ground(x, e.gy - 40); e.bolts.push({ x, gy, t: 0, s: Math.random() * 99 }); A.hitR(e, x, gy - 20, 14, { mult: 0.7, kb: 0.3, once: false, every: 0.12 }); A.sfx('zap', { minGap: 0.04 }); }
+            // ...lightning everywhere...
+            if (e.t < 3.2 && e.bt <= 0) { e.bt = 0.08; const live = e.ts.filter((t) => !t.dead), t = live[Math.floor(Math.random() * Math.max(1, live.length))]; const x = t ? A.center(t).x : p.cx + A.rnd(-240, 240), gy = A.ground(x, e.gy - 40); e.bolts.push({ x, gy, t: 0, s: Math.random() * 99, w: Math.random() < 0.3 ? 4 : 2 }); A.hitR(e, x, gy - 20, 16, { mult: 0.7, kb: 0.3, once: false, every: 0.12 }); A.sfx('zap', { minGap: 0.04 }); if (Math.random() < 0.25) A.flash(0.06); }
+            // ...a giant wave...
             if (e.t > 2 && !e.wave) { e.wave = true; e.wx = p.cx - e.dir * 200; e.hit.clear(); A.sfx('crash'); }
-            if (e.wave && e.t < 3.4) { e.wx += e.dir * 320 * dt; A.hit(e, { x: e.dir > 0 ? e.wx - 40 : e.wx, y: e.gy - 70, w: 40, h: 70 }, { mult: 2.5, kb: 2.4, dir: e.dir }); }
+            if (e.wave && e.t < 3.4) { e.wx += e.dir * 320 * dt; A.hit(e, { x: e.dir > 0 ? e.wx - 50 : e.wx, y: e.gy - 110, w: 50, h: 110 }, { mult: 2.5, kb: 2.4, dir: e.dir }); }
+            // ...and then everything comes together in one final strike
+            if (e.t > 3.3 && !e.fin) { e.fin = e.t; e.hit.clear(); A.blast(e, e.cx, e.gy - 40, 150 * H.sc(e), { dmg: e.dmg * 8 }); A.flash(0.8); A.shake(16, 0.7); A.sfx('boom'); A.sfx('zap', { minGap: 0 }); }
           },
           draw(e, ctx, ox, oy, A) {
-            const grow = Math.min(1, e.t / 3), dark = e.t < 3.4 ? Math.min(1, e.t * 2) * (0.5 + grow * 0.25) : Math.max(0, 0.75 - (e.t - 3.4) * 1.3);
+            const V = view(A), grow = Math.min(1, e.t / 3), dark = e.t < 3.5 ? Math.min(1, e.t * 2) * (0.5 + grow * 0.25) : Math.max(0, 0.75 - (e.t - 3.5) * 1.1);
             A.alpha(ctx, dark, () => A.px(ctx, -10, -10, 2000, 2000, '#060a18'));
             const top = A.top() + oy, gy = e.gy + oy;
             A.alpha(ctx, Math.min(1, dark * 1.5), () => {
-              for (let i = 0; i < 14; i++) CLOUD(ctx, A, p.cx + ox - 320 + i * 48 + Math.sin(e.t + i) * 8, top + 12 + (i % 2) * 5, 56, '#141c34', '#2a3a5a');
-              for (let i = 0; i < 60; i++) { const xx = ((i * 53 + e.t * 500) % 700) - 350, yy = top + 30 + ((i * 31 + e.t * 260) % 240); A.line(ctx, p.cx + ox + xx, yy, p.cx + ox + xx + 8, yy + 6, '#8ab0e0'); }
-              for (const tn of e.tornados) { const x = tn.x + ox; for (let i = 0; i < 90; i++) { const q = i / 90, a = e.t * 10 + i * 0.5, r = 5 + q * (18 + grow * 10); A.px(ctx, x + Math.cos(a) * r, gy - q * 140, 2, 1, i % 4 ? '#6a8aff' : '#c8e0ff'); } }
-              if (e.wave && e.t < 3.6) { const x = e.wx + ox, d = e.dir; for (let i = 0; i < 46; i++) { const h = 70 * Math.sin(Math.min(1, i / 38) * Math.PI / 2); A.px(ctx, x - d * i, gy - h, 1, h, i % 5 ? '#1a4aaa' : '#3a8aff'); } for (let i = 0; i < 10; i++) A.px(ctx, x - d * 3 + Math.sin(e.t * 20 + i) * 3, gy - 70 + i * 3, 3, 2, '#ffffff'); }
+              for (let i = 0; i < 18; i++) CLOUD(ctx, A, p.cx + ox - 420 + i * 48 + Math.sin(e.t + i) * 8, top + 12 + (i % 2) * 5, 60, '#141c34', '#2a3a5a');
+              // driving rain
+              for (let i = 0; i < 140; i++) { const xx = ((i * 53 + e.t * 500) % (V.width + 100)) - 50, yy = ((i * 31 + e.t * 520) % (V.height + 20)) - 10; A.line(ctx, xx, yy, xx + 6, yy + 9, i % 4 ? '#8ab0e0' : '#c8e0ff'); }
+              // the tornadoes
+              for (const tn of e.tornados) { const x = tn.x + ox; A.alpha(ctx, 0.3, () => { for (let yy = 0; yy < 170; yy += 2) { const r = 6 + (yy / 170) * (26 + grow * 14); A.px(ctx, x - r, gy - yy, r * 2, 1, '#3a4a8a'); } }); for (let i = 0; i < 150; i++) { const q = i / 150, a = e.t * 10 + i * 0.5, r = 6 + q * (26 + grow * 14); A.px(ctx, x + Math.cos(a) * r, gy - q * 170, 3, 1, i % 4 ? '#6a8aff' : '#c8e0ff'); } }
+              // the wave
+              if (e.wave && e.t < 3.6) { const x = e.wx + ox, d = e.dir; for (let i = 0; i < 70; i++) { const h = 110 * Math.sin(Math.min(1, i / 55) * Math.PI / 2); A.px(ctx, x - d * i, gy - h, 1, h, i % 5 ? '#1a4aaa' : '#3a8aff'); } for (let i = 0; i < 18; i++) A.px(ctx, x - d * 3 + Math.sin(e.t * 20 + i) * 4, gy - 110 + i * 6, 3, 2, '#ffffff'); }
             });
-            for (const b of e.bolts) if (b.t < 0.1) BOLT(ctx, A, b.x + ox, top + 20, b.gy + oy, '#ffe94a', b.s);
+            for (const b of e.bolts) if (b.t < 0.1) W.bolt(ctx, A, b.x + ox, top + 22, b.x + ox, b.gy + oy, '#ffe94a', b.s, b.w);
+            if (e.fin) { const k = (e.t - e.fin) / 0.9, x = e.cx + ox; A.alpha(ctx, Math.max(0, 1 - k), () => { W.bolt(ctx, A, x, top, x, gy - 4, '#ffe94a', e.t * 30, Math.max(3, 26 * (1 - k))); A.ring(ctx, x, gy - 40, 20 + k * 220, '#c8e0ff', (20 + k * 220) * 0.6, 2); A.ring(ctx, x, gy - 40, 10 + k * 160, '#ffe94a', (10 + k * 160) * 0.6, 2); }); }
           },
         }, {});
       },

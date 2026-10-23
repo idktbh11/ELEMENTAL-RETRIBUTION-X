@@ -103,8 +103,9 @@
       const kit = this._kit();
       if (!kit) return '???';
       if (n.slot === 'block') return kit.block[0].toUpperCase() + '+';
-      if (n.slot === 'dash') return kit.dash[0].toUpperCase() + '+';
+      if (n.slot === 'dash') return kit.dashUp ? kit.dashUp.name.toUpperCase() : kit.dash[0].toUpperCase() + '+';
       if (n.slot === 'potency') return 'STATUS POTENCY';
+      if (n.slot === 'm1' && n.rank === 2 && kit.m1Up) return kit.m1Up.name.toUpperCase();
       return ERX.Abilities.move(kit, n.slot).name.toUpperCase() + (n.rank === 2 ? '+' : '');
     }
 
@@ -206,7 +207,7 @@
           this.items.push({ id: n.id, x, y, w, h });
           const owned = this._owned(n), avail = !owned && this._unlocked(n), sel = !this.onBack && this.sel === n.id;
           const up = n.rank === 2;
-          const col = up ? (kit.up === 'rainbow' ? '#ff7ad8' : kit.up) : el.color;
+          const col = up ? C.mix(el.color, '#ffffff', 0.35) : el.color;   // upgrades keep your colour
           T.rect(ctx, x - 1, y - 1, w + 2, h + 2, sel ? T.gold : n.slot === 'ult' ? '#ffd34d' : T.ink);
           T.rect(ctx, x, y, w, h, owned ? C.shade(col, -0.35) : avail ? '#2a3470' : '#161b3a');
           if (owned) T.rect(ctx, x, y, w, 2, col);
@@ -216,8 +217,8 @@
           const fl = this.flash[n.id] || 0;
           if (fl > 0) { ctx.fillStyle = 'rgba(255,255,255,' + fl.toFixed(2) + ')'; ctx.fillRect(x, y, w, h); }
           // the move's name under its node
-          if (n.rank !== 2 || n.slot === 'block' || n.slot === 'dash') {
-            const nm = n.slot === 'potency' ? 'STATUS' : n.slot === 'block' ? kit.block[0] : n.slot === 'dash' ? kit.dash[0] : ERX.Abilities.move(kit, n.slot).name;
+          if (n.rank !== 2 || n.slot === 'block' || n.slot === 'dash' || n.slot === 'm1') {
+            const nm = n.slot === 'potency' ? 'STATUS' : n.slot === 'block' ? kit.block[0] : n.slot === 'dash' ? (kit.dashUp ? kit.dashUp.name : kit.dash[0]) : ERX.Abilities.move(kit, n.slot, n.rank === 2).name;
             F.draw(ctx, nm.length > 13 ? nm.slice(0, 12) + '.' : nm, x + w / 2, y + h + 3, { color: owned ? '#d4daf5' : '#5a6290', align: 'center' });
           }
         }
@@ -245,12 +246,14 @@
       const status = ERX.Abilities.STATUS[kit.status];
       if (n.slot === 'potency') return ['STATUS POTENCY  ' + this._rank('potency') + '/3   ' + state, 'Your attacks inflict ' + (status ? '{el' + el.id + '}' + status.name + '{/}' : 'random statuses') + '. Each rank: lasts longer, hurts more.'];
       if (n.slot === 'block') return [kit.block[0].toUpperCase() + ' (UPGRADE)   ' + state, 'Your block becomes ' + kit.block[0] + '. Upgraded: guard lasts longer', 'and attackers who hit it get ' + (status ? status.name : 'a random status') + '.'];
-      if (n.slot === 'dash') return [kit.dash[0].toUpperCase() + ' (UPGRADE)   ' + state, 'Your dash becomes ' + kit.dash[0] + '. Upgraded: faster, and it', 'damages + inflicts ' + (status ? status.name : 'a random status') + ' on anything you dash through.'];
-      const mv = ERX.Abilities.move(kit, n.slot), st = ERX.Abilities.stats(kit, n.slot);
-      const head = mv.name.toUpperCase() + (n.rank === 2 ? ' (UPGRADE)' : '') + '   ' + state;
+      if (n.slot === 'dash') { const du = kit.dashUp; if (du) return [du.name.toUpperCase() + ' (UPGRADED DASH)   ' + state, ...F.wrap(du.desc, 380).slice(0, 2)]; return [kit.dash[0].toUpperCase() + ' (UPGRADE)   ' + state, 'Your dash becomes ' + kit.dash[0] + '. Upgraded: faster, and it', 'damages + inflicts ' + (status ? status.name : 'a random status') + ' on anything you dash through.']; }
+      const newM1 = n.slot === 'm1' && n.rank === 2 && kit.m1Up;
+      const mv = ERX.Abilities.move(kit, n.slot, newM1), st = ERX.Abilities.stats(kit, n.slot, newM1);
+      const head = mv.name.toUpperCase() + (newM1 ? ' (UPGRADED M1)' : n.rank === 2 ? ' (UPGRADE)' : '') + '   ' + state;
+      if (newM1) return [head, ...F.wrap('Your M1 becomes a whole new move: ' + mv.desc, 380).slice(0, 2)];
       const desc = ERX.Abilities.describe(kit, n.slot, el.name);
       const nums = n.slot === 'ult' ? 'Key: ' + ERX.keyText('{ultimate}') : (n.slot === 'm1' ? 'Key: ' + ERX.keyText('{attack}') : 'Key: ' + ERX.keyText('{ability' + n.slot.slice(1) + '}') + '   Mana: ' + st.mp) + '   Cooldown: ' + st.cd + 's';
-      if (n.rank === 2) return [head, 'Upgraded: much stronger, bigger, extra hits, and a whole new colour.', nums];
+      if (n.rank === 2) return [head, 'Upgraded: much stronger, bigger, faster and more detailed. Same colours.', nums];
       return [head, desc + (status ? ' Inflicts ' + status.name + '.' : ''), nums];
     }
   }

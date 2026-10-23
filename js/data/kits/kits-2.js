@@ -23,7 +23,7 @@
     }
   };
   K.nature = {
-    status: 'poison', up: '#ff7ad8', fx: 'leaves', block: ['Treant Wall', 'tree'], dash: ['Grassy Dash', 'trail'],
+    status: 'poison', fx: 'leaves', block: ['Treant Wall', 'tree'], dash: ['Grassy Dash', 'trail'],
     m1: {
       name: 'Thorn Strike', dmg: 9, cd: 0.5, kind: 'custom', life: 0.55,
       desc: 'A grassy, curved thorn bursts out of the ground under the nearest enemy.',
@@ -155,7 +155,7 @@
     for (let i = 0; i <= Math.round(n * k); i++) { const q = i / n, x = U.lerp(x0, x1, q) + Math.sin(q * 6 + wob) * 4, y = U.lerp(y0, y1, q), w = Math.max(1, 4 * (1 - q)); A.px(ctx, x - w / 2, y - w / 2, w, w, i % 2 ? P.d : '#05020a'); }
   };
   K.darkness = {
-    status: 'blind', up: '#ff3a5a', fx: 'gloom', block: ['Shadow Veil', 'veil'], dash: ['Dark Step', 'ghost'],
+    status: 'blind', fx: 'gloom', block: ['Shadow Veil', 'veil'], dash: ['Dark Step', 'ghost'],
     m1: {
       name: 'Dark Scythe', dmg: 10, cd: 0.48, kind: 'custom', life: 0.3,
       desc: 'Sweep a scythe of solid darkness in a wide arc.',
@@ -285,7 +285,7 @@
   const SMOKE = { life: 1, update(e, dt) { e.x += e.vx * dt; e.y += e.vy * dt; e.vx *= 1 - dt * 2; }, draw(e, ctx, ox, oy, A) { A.alpha(ctx, 0.6 * (1 - e.t / e.life), () => A.disc(ctx, e.x + ox, e.y + oy, Math.round(3 + e.t * 6), '#3a3a4a')); } };
   const STAR4 = (ctx, A, x, y, a, s, P) => { for (let k = 0; k < 4; k++) { const aa = a + (k * Math.PI) / 2; for (let r = 0; r < 5 * s; r++) A.px(ctx, x + Math.cos(aa) * r, y + Math.sin(aa) * r, 1, 1, r > 3 * s ? '#ffffff' : P.c); } A.px(ctx, x - 1, y - 1, 2, 2, '#22222e'); };
   K.shadow = {
-    status: 'expose', up: '#6af0ff', fx: 'wisps', block: ['Shade Guard', 'veil'], dash: ['Shadow Dash', 'blink'],
+    status: 'expose', fx: 'wisps', block: ['Shade Guard', 'veil'], dash: ['Shadow Dash', 'blink'],
     m1: {
       name: 'Shadow Stab', dmg: 8, cd: 0.42, kind: 'custom', life: 0.2,
       desc: 'Lunge forward and stab, leaving afterimages behind.',
@@ -414,7 +414,7 @@
   const MOTE = { life: 0.8, update(e, dt) { e.y -= 40 * dt; e.x += Math.sin(e.t * 8 + e.ph) * 10 * dt; }, draw(e, ctx, ox, oy, A) { A.alpha(ctx, 1 - e.t / e.life, () => A.px(ctx, e.x + ox, e.y + oy, 1, 1, e.pal.l)); } };
   const RAYS = (ctx, A, x, y, r, n, a0, col) => { for (let i = 0; i < n; i++) { const a = a0 + (i / n) * Math.PI * 2; A.line(ctx, x + Math.cos(a) * r * 0.3, y + Math.sin(a) * r * 0.3, x + Math.cos(a) * r, y + Math.sin(a) * r, col); } };
   K.light = {
-    status: 'dazzle', up: '#ffd34d', fx: 'motes', block: ['Light Barrier', 'shield'], dash: ['Light Speed', 'blink'],
+    status: 'dazzle', fx: 'motes', block: ['Light Barrier', 'shield'], dash: ['Light Speed', 'blink'],
     m1: {
       name: 'Light Lance', dmg: 7, cd: 0.38, kind: 'custom', life: 0.22,
       desc: 'Thrust a spear of pure light that extends and retracts in a flash.',
@@ -526,7 +526,7 @@
   const CIRCLE = (ctx, A, x, y, r, t, P, n) => { A.ring(ctx, x, y, r, P.c, r * 0.35); A.ring(ctx, x, y, r * 0.7, P.l, r * 0.25); for (let i = 0; i < (n || 6); i++) { const a = t + (i / (n || 6)) * Math.PI * 2; RUNE(ctx, A, x + Math.cos(a) * r * 0.85, y + Math.sin(a) * r * 0.3, i, '#ffffff'); } };
   const ARC_BOLT = H.proj((b, ctx, ox, oy, A) => { A.disc(ctx, b.x + ox, b.y + oy, b.up ? 3 : 2, b.pal.c, '#ffffff'); RUNE(ctx, A, b.x + ox - b.vx * 0.03, b.y + oy - b.vy * 0.03, Math.floor(b.t * 10), b.pal.l); }, { life: 1.6, r: 3, homing: 7 });
   K.arcane = {
-    status: 'mark', up: '#5affc8', fx: 'runes', block: ['Rune Shield', 'shield'], dash: ['Blink', 'blink'],
+    status: 'mark', fx: 'runes', block: ['Rune Shield', 'shield'], dash: ['Blink', 'blink'],
     m1: {
       name: 'Arcane Missile', dmg: 7, cd: 0.45, kind: 'custom', life: 0.01,
       desc: 'A homing missile of raw magic trailing runes.',
@@ -625,7 +625,7 @@
   const BUBBLE = { life: 0.6, update(e, dt) { e.y -= 18 * dt; }, draw(e, ctx, ox, oy, A) { A.alpha(ctx, 1 - e.t / e.life, () => A.ring(ctx, e.x + ox, e.y + oy, 1 + e.t * 3, e.pal.l)); } };
   const GLOB = (b, ctx, ox, oy, A) => { const r = b.up ? 3 : 2; A.disc(ctx, b.x + ox, b.y + oy, r, b.pal.c, b.pal.l); A.px(ctx, b.x + ox, b.y + oy + r, 1, 2, b.pal.c); };
   K.poison = {
-    status: 'toxin', up: '#d84aff', fx: 'bubbles', block: ['Toxic Bubble', 'bubble'], dash: ['Slime Trail', 'trail'],
+    status: 'toxin', fx: 'bubbles', block: ['Toxic Bubble', 'bubble'], dash: ['Slime Trail', 'trail'],
     m1: {
       name: 'Venom Spit', dmg: 6, cd: 0.42, kind: 'custom', life: 0.01,
       desc: 'Spit an arcing glob of venom that leaves a little sizzling puddle.',
@@ -723,4 +723,290 @@
       },
     },
   };
+
+  // ============================================================ UPGRADED M1s + DASHES
+  // (see kits-1.js: M1+ swaps in m1Up, DASH+ adds dashUp; same colours, just bigger, faster, stronger, more detailed)
+  {
+    const W = () => ERX.AwkHelp;
+
+    // -------------------------------------------------------------- NATURE
+    K.nature.m1Up = {
+      name: 'Razor Leaves', dmg: 6, cd: 0.5, kind: 'custom', life: 0.75,
+      desc: 'A whirlwind of razor-sharp leaves spins forward, slicing over and over and leaving poison in every cut.',
+      spawn(e, g, A) { H.at(e, A, 12, -2); e.vx = e.dir * 135; A.sfx('whoosh', { minGap: 0.05 }); },
+      update(e, dt, g, A) {
+        const r = 14 * H.sc(e);
+        e.x += e.vx * dt * 1.2;
+        A.tickR(e, e.x, e.y, r, 0.12, { kb: 0.15, dir: e.dir });
+        if (A.solid(e.x + e.dir * r * 0.5, e.y)) e.dead = true;
+      },
+      onEnd(e, A) { for (let i = 0; i < 12; i++) { const a = Math.random() * Math.PI * 2; A.spawn(e, LEAF, { x: e.x, y: e.y, vx: Math.cos(a) * 70, vy: Math.sin(a) * 70 - 20 }); } },
+      draw(e, ctx, ox, oy, A) {
+        const P = e.pal, s = H.sc(e), x = e.x + ox, y = e.y + oy, r = 14 * s;
+        A.alpha(ctx, A.fade(e, 0.06, 0.15), () => {
+          A.alpha(ctx, 0.3, () => A.ring(ctx, x, y, r, P.c, r * 0.8, 2));
+          for (let i = 0; i < 21; i++) {   // three rings of leaves, the middle one spinning the other way
+            const lane = i % 3, rr = r * (0.4 + lane * 0.3), sp = (lane === 1 ? -1 : 1) * (9 + lane * 2), a = e.t * sp + i * 2.1;
+            const lx = x + Math.cos(a) * rr, ly = y + Math.sin(a) * rr * 0.8, ta = a + (Math.PI / 2) * Math.sign(sp), cx = Math.cos(ta) * 3.2, cy = Math.sin(ta) * 3.2;
+            A.line(ctx, lx - cx, ly - cy, lx + cx, ly + cy, P.d, 3);
+            A.line(ctx, lx - cx, ly - cy, lx + cx, ly + cy, i % 2 ? P.c : P.l, 2);
+            A.line(ctx, lx - cx * 0.6, ly - cy * 0.6, lx + cx * 0.6, ly + cy * 0.6, '#ffffff', 1);   // the shiny cutting edge
+          }
+          A.disc(ctx, x, y, Math.round(3 * s), P.d, P.c);
+        });
+      },
+    };
+    const BRAMBLE = {
+      life: 0.75,
+      spawn(e, g, A) { e.gy = A.ground(e.x, e.y - 4); e.h = (14 + Math.random() * 8) * H.sc(e); e.bend = A.rnd(-5, 5); },
+      update(e, dt, g, A) { if (e.t > 0.06 && !e.done) { e.done = true; A.hit(e, { x: e.x - 5, y: e.gy - e.h, w: 10, h: e.h }, { kb: 0.5 }); } },
+      draw(e, ctx, ox, oy, A) {
+        const k = Math.min(1, e.t / 0.08), P = e.pal, x = e.x + ox, gy = e.gy + oy;
+        A.alpha(ctx, Math.min(1, (e.life - e.t) / 0.2), () => {
+          ROOT_LINE(ctx, A, x, gy, x + e.bend, gy - e.h, k, 3, P, e.bend * 0.6, true);
+          ROOT_LINE(ctx, A, x + 2, gy, x + 2 - e.bend * 0.6, gy - e.h * 0.6, k, 2, P, -e.bend, true);
+          if (k >= 1) { A.px(ctx, x + e.bend - 1, gy - e.h - 2, 3, 2, P.l); A.px(ctx, x + e.bend, gy - e.h - 3, 1, 1, '#ffffff'); }   // a bud on top
+        });
+      },
+    };
+    K.nature.dashUp = {
+      name: 'Bramble Rush', dmg: 9, life: 0.4,
+      desc: 'Thorny brambles burst out of the ground all along your path, right on your heels.',
+      update(e, dt, g, A) {
+        if (!H.dashing(e, A)) return;
+        const q = H.end(e);
+        if (e.lastX === undefined || Math.abs(q.x - e.lastX) >= 9) { e.lastX = q.x; A.spawn(e, BRAMBLE, { x: q.x - e.dir * 4, y: q.f }); }
+      },
+    };
+
+    // ------------------------------------------------------------ DARKNESS
+    K.darkness.m1Up = {
+      name: 'Night Sickle', dmg: 10, cd: 0.5, kind: 'custom', life: 0.9,
+      desc: 'Hurl a huge spinning sickle of darkness. It cuts on the way out, then comes back and cuts again.',
+      spawn(e, g, A) { H.at(e, A, 10, -2); e.v = 330; A.sfx('swing'); },
+      update(e, dt, g, A) {
+        const p = A.p, s = H.sc(e);
+        e.v -= 900 * dt;   // slows down, stops, then comes back to you
+        if (e.v < 0 && !e.back) { e.back = true; e.hit.clear(); }
+        if (!e.back) e.x += e.dir * e.v * dt * 1.2;
+        else {
+          const tx = p.cx, ty = p.y + 8, a = Math.atan2(ty - e.y, tx - e.x), sp = Math.min(380, -e.v * 1.2);
+          e.x += Math.cos(a) * sp * dt; e.y += Math.sin(a) * sp * dt;
+          if (Math.hypot(tx - e.x, ty - e.y) < 8) e.dead = true;
+        }
+        A.hitR(e, e.x, e.y, 13 * s, { kb: 0.6, dir: e.back ? -e.dir : e.dir });
+      },
+      draw(e, ctx, ox, oy, A) {
+        const P = e.pal, s = H.sc(e), x = e.x + ox, y = e.y + oy, R = 12 * s, rot = e.t * 26 * e.dir;
+        A.glow(ctx, x, y, R * 0.7, P.d, 0.3);
+        A.alpha(ctx, 0.3, () => A.ring(ctx, x, y, R, P.c));   // the blur of the spin
+        for (let b = 0; b < 2; b++) {   // two curved blades
+          const a0 = rot + b * Math.PI;
+          for (let i = 0; i <= 14; i++) { const q = i / 14, a = a0 + q * 2.2, r = R * (0.25 + q * 0.75), w = Math.max(1, Math.round(3 * Math.sin(q * Math.PI))); A.px(ctx, x + Math.cos(a) * r, y + Math.sin(a) * r, w, w, q > 0.8 ? '#ffffff' : i % 2 ? P.c : P.l); }
+        }
+        A.disc(ctx, x, y, Math.round(2 * s), '#05020a');
+        A.ring(ctx, x, y, Math.round(2 * s) + 1, P.l);
+      },
+    };
+    K.darkness.dashUp = {
+      name: 'Gloom Gate', dmg: 14, life: 0.8,
+      desc: 'Tear a dark gate open where you start and where you stop. A moment later, both of them erupt.',
+      update(e, dt, g, A) {
+        if (H.dashing(e, A)) return;
+        if (!e.boom && H.since(e) > 0.25) {
+          e.boom = true; const s = H.sc(e);
+          for (const q of [e.pts[0], H.end(e)]) { A.hitR(e, q.x, q.y, 22 * s, { kb: 0.8 }); A.spawn(e, W().SHOCK, { x: q.x, y: q.y, r: 20 * s }); A.puff(e, q.x, q.y, 8, 2); }
+          A.sfx('boom', { minGap: 0.05 }); A.shake(2, 0.15);
+        }
+      },
+      draw(e, ctx, ox, oy, A) {
+        if (!e.pts) return;
+        const P = e.pal, s = H.sc(e), open = e.boom ? Math.max(0, 1 - (H.since(e) - 0.25) / 0.2) : Math.min(1, e.t / 0.1);
+        if (open <= 0) return;
+        for (const q of e.over ? [e.pts[0], H.end(e)] : [e.pts[0]]) {
+          const x = q.x + ox, y = q.y + oy, r = 10 * s * open;
+          A.disc(ctx, x, y, Math.max(1, Math.round(r)), '#05020a');
+          A.ring(ctx, x, y, r, P.c, r * 1.3); A.ring(ctx, x, y, r + 2, P.d, (r + 2) * 1.3, 2);
+          for (let i = 0; i < 6; i++) { const a = e.t * 4 + i * 1.05, l = r + 3 + Math.sin(e.t * 12 + i) * 2; A.line(ctx, x + Math.cos(a) * r, y + Math.sin(a) * r * 1.3, x + Math.cos(a + 0.4) * l, y + Math.sin(a + 0.4) * l * 1.3, P.l, 1); }   // tendrils curling out
+          if (e.over && !e.boom && Math.floor(e.t * 20) % 2) A.ring(ctx, x, y, r * 0.5, '#ffffff', r * 0.65);   // about to go off
+        }
+      },
+    };
+
+    // -------------------------------------------------------------- SHADOW
+    K.shadow.m1Up = {
+      name: 'Thousand Cuts', dmg: 3.5, cd: 0.55, kind: 'custom', life: 0.4,
+      desc: 'A storm of shadow slashes rips through everything in front of you. It is actually six cuts. We counted.',
+      spawn(e, g, A) { H.at(e, A, 0); e.cuts = []; e.n = 0; },
+      update(e, dt, g, A) {
+        H.at(e, A, 0);
+        const s = H.sc(e), L = 46 * s;
+        while (e.n < 6 && e.t >= e.n * 0.045) {
+          const last = e.n === 5;
+          e.cuts.push({ x: e.x + e.dir * (14 + Math.random() * (L - 24)), y: e.y + A.rnd(-6, 6), a: A.rnd(-1.2, 1.2) + (e.n % 2 ? Math.PI / 2 : 0), r: (last ? 18 : 11) * s, t: e.t, last });
+          e.hit.clear();
+          A.hit(e, { x: e.dir > 0 ? e.x : e.x - L, y: e.y - 14 * s, w: L, h: 28 * s }, { dir: e.dir, kb: last ? 0.8 : 0.1, mult: last ? 1.6 : 1 });
+          A.sfx('swing', { minGap: 0.02 });
+          e.n++;
+        }
+      },
+      draw(e, ctx, ox, oy, A) {
+        const P = e.pal;
+        for (const c of e.cuts) {
+          const k = (e.t - c.t) / 0.14;
+          if (k > 1) continue;
+          const x = c.x + ox, y = c.y + oy, dx = Math.cos(c.a) * c.r, dy = Math.sin(c.a) * c.r, grow = Math.min(1, k * 3);
+          A.alpha(ctx, 1 - k, () => {
+            A.line(ctx, x - dx, y - dy, x - dx + dx * 2 * grow, y - dy + dy * 2 * grow, P.d, c.last ? 4 : 3);
+            A.line(ctx, x - dx, y - dy, x - dx + dx * 2 * grow, y - dy + dy * 2 * grow, '#ffffff', 1);
+            if (c.last) A.ring(ctx, x, y, c.r * (0.5 + k), P.c, c.r * (0.5 + k) * 0.6, 2);
+          });
+        }
+      },
+    };
+    K.shadow.dashUp = {
+      name: 'Decoy Shade', dmg: 15, life: 0.75,
+      desc: 'Leave a shadow copy of yourself behind. Half a second later, it explodes. Rude, but effective.',
+      spawn(e, g, A) { const p = A.p; e.dx = p.cx; e.df = p.feet; e.face = p.facing; },
+      update(e, dt, g, A) {
+        H.dashing(e, A);
+        if (!e.boom && e.t > 0.5) {
+          e.boom = true; const s = H.sc(e), y = e.df - 11;
+          A.hitR(e, e.dx, y, 24 * s, { kb: 1 }); A.spawn(e, W().SHOCK, { x: e.dx, y, r: 22 * s });
+          W().debris(A, e.dx, y, 12, [e.pal.d, e.pal.c, '#05020a'], 160);
+          A.sfx('boom', { minGap: 0.05 }); A.shake(2, 0.14);
+        }
+      },
+      draw(e, ctx, ox, oy, A) {
+        if (e.boom) return;
+        const P = e.pal, x = e.dx + ox, y = e.df + oy, warn = e.t > 0.32 && Math.floor(e.t * 24) % 2;
+        A.alpha(ctx, 0.9, () => { H.drawGhost(ctx, A, 'idle', x - 1, y, e.face, P.l); H.drawGhost(ctx, A, 'idle', x + 1, y, e.face, P.l); H.drawGhost(ctx, A, 'idle', x, y, e.face, warn ? '#ffffff' : P.d); });
+        for (let i = 0; i < 3; i++) A.px(ctx, x - 3 + i * 3, y - 24 - ((Math.floor(e.t * 10) + i) % 3) * 3, 1, 2, P.c);   // shadow smoke curling off it
+      },
+    };
+
+    // --------------------------------------------------------------- LIGHT
+    K.light.m1Up = {
+      name: 'Trinity Ray', dmg: 12, cd: 0.5, kind: 'custom', life: 0.3,
+      desc: 'Fire a ray of light that splits into three. Good luck dodging all of them.',
+      spawn(e, g, A) {
+        H.at(e, A, 6, -1);
+        const s = H.sc(e), split = 40 * s, L = 120 * s, a0 = e.dir > 0 ? 0 : Math.PI;
+        const cast = (x0, y0, a, len) => { let d = 0; while (d < len && !A.solid(x0 + Math.cos(a) * d, y0 + Math.sin(a) * d)) d += 4; return { x0, y0, a, len: Math.min(d, len) }; };
+        const stem = cast(e.x, e.y, a0, split);
+        e.rays = [stem];
+        if (stem.len >= split) for (const da of [-0.32, 0, 0.32]) e.rays.push(cast(e.x + e.dir * split, e.y, a0 + da * e.dir, L - split));
+        for (const r of e.rays) for (let d = 0; d <= r.len; d += 5) A.hitR(e, r.x0 + Math.cos(r.a) * d, r.y0 + Math.sin(r.a) * d, 5 * s, { dir: e.dir, kb: 0.5 });
+        A.sfx('zap', { minGap: 0.04 });
+      },
+      draw(e, ctx, ox, oy, A) {
+        const P = e.pal, s = H.sc(e), k = e.t / e.life, w = Math.max(1, Math.round((1 - k) * 3 * s)), st = e.rays[0];
+        for (const r of e.rays) W().beam(ctx, A, r.x0 + ox, r.y0 + oy, r.x0 + Math.cos(r.a) * r.len + ox, r.y0 + Math.sin(r.a) * r.len + oy, w, P.c, P.l);
+        A.star(ctx, st.x0 + Math.cos(st.a) * st.len + ox, st.y0 + oy, Math.max(1, Math.round((1 - k) * 6 * s)), '#ffffff', P.l);   // the split point
+        A.glow(ctx, st.x0 + ox, st.y0 + oy, Math.max(1, 6 * s * (1 - k)), P.l, 0.5);
+      },
+    };
+    const PHOTON = H.proj((b, ctx, ox, oy, A) => { const x = b.x + ox, y = b.y + oy; A.line(ctx, x, y, x - b.vx * 0.02, y - b.vy * 0.02, b.pal.l, 1); A.px(ctx, x - 1, y - 1, 2, 2, '#ffffff'); }, { life: 0.6, r: 3, homing: 6, range: 120 });
+    K.light.dashUp = {
+      name: 'Photon Trail', dmg: 3, life: 0.6,
+      desc: 'Shed sparks of light as you dash. A moment later they all shoot forward at whatever is in front of you.',
+      update(e, dt, g, A) {
+        if (H.dashing(e, A)) return;
+        if (!e.fired && H.since(e) > 0.22) {
+          e.fired = true; let i = 0;
+          H.along(e, 7, (x, y) => { A.spawn(e, PHOTON, { x, y: y + Math.sin(i * 2.3) * 6, vx: e.dir * 260, vy: Math.sin(i * 1.7) * 30 }); i++; });
+          A.sfx('zap', { minGap: 0.04 });
+        }
+      },
+      draw(e, ctx, ox, oy, A) {
+        if (!e.pts || e.fired) return;
+        const P = e.pal; let i = 0;
+        H.along(e, 7, (x, y) => { const yy = y + Math.sin(i * 2.3) * 6, tw = Math.floor(e.t * 20 + i) % 3; A.glow(ctx, x + ox, yy + oy, 3, P.l, 0.35); A.star(ctx, x + ox, yy + oy, tw ? 2 : 3, '#ffffff', P.l); i++; });
+      },
+    };
+
+    // -------------------------------------------------------------- ARCANE
+    K.arcane.m1Up = {
+      name: 'Spellweave', dmg: 9, cd: 0.5, kind: 'custom', life: 0.55,
+      desc: 'Two threads of magic weave forward through everything in their path, then tie themselves into a knot and explode.',
+      spawn(e, g, A) { H.at(e, A, 8, -2); e.x0 = e.x; e.vx = e.dir * 230; },
+      update(e, dt, g, A) {
+        const s = H.sc(e);
+        e.x += e.vx * dt * 1.2;
+        A.hit(e, { x: e.x - 6, y: e.y - 10 * s, w: 12, h: 20 * s }, { dir: e.dir, kb: 0.3 });
+        if (A.solid(e.x, e.y)) e.dead = true;
+      },
+      onEnd(e, A) { const s = H.sc(e); e.hit.clear(); A.hitR(e, e.x, e.y, 18 * s, { mult: 1.2, kb: 0.8 }); A.spawn(e, W().SHOCK, { x: e.x, y: e.y, r: 18 * s }); A.sfx('pop'); },
+      draw(e, ctx, ox, oy, A) {
+        const P = e.pal, s = H.sc(e), y = e.y + oy, tail = Math.min(Math.abs(e.x - e.x0), 70 * s);
+        for (let i = 0; i <= tail; i += 1.5) {   // the two threads, braided round each other
+          const x = e.x - e.dir * i, amp = 8 * s * Math.min(1, i / 12), ph = x * 0.12 - e.t * 6, f = 1 - i / (70 * s);
+          A.alpha(ctx, f, () => { A.px(ctx, x + ox, y + Math.sin(ph) * amp, 1, 2, P.c); A.px(ctx, x + ox, y - Math.sin(ph) * amp, 1, 2, P.l); });
+        }
+        A.glow(ctx, e.x + ox, y, 6 * s, P.c, 0.35);
+        A.disc(ctx, e.x + ox, y, Math.round(2 * s), '#ffffff');
+        for (let i = 0; i < 3; i++) if ((i + 1) * 14 * s < tail) RUNE(ctx, A, e.x + ox - e.dir * (i + 1) * 14 * s, y + (i % 2 ? 8 : -8) * s, i + Math.floor(e.t * 8), P.l);
+      },
+    };
+    const GLYPH = {
+      life: 2,
+      update(e, dt, g, A) { if (e.go && !e.done) { e.done = e.t; A.hitR(e, e.x, e.y, 13 * H.sc(e), { kb: 0.6 }); A.sfx('pop', { minGap: 0.03 }); A.puff(e, e.x, e.y, 4); e.life = e.t + 0.25; } },
+      draw(e, ctx, ox, oy, A) {
+        const P = e.pal, s = H.sc(e), x = e.x + ox, y = e.y + oy;
+        if (!e.done) { CIRCLE(ctx, A, x, y, 7 * s * Math.min(1, e.t / 0.1), e.t * 3, P, 4); return; }
+        const k = (e.t - e.done) / 0.25, r = (7 + k * 10) * s;
+        A.alpha(ctx, 1 - k, () => {
+          A.ring(ctx, x, y, r, '#ffffff', r * 0.4); A.ring(ctx, x, y, r * 1.2, P.c, r * 0.5, 2);
+          for (let i = 0; i < 4; i++) RUNE(ctx, A, x + Math.cos(i * 1.57 + k) * r, y + Math.sin(i * 1.57 + k) * r * 0.6, i, P.l);
+        });
+      },
+    };
+    K.arcane.dashUp = {
+      name: 'Glyph Wake', dmg: 8, life: 1.2,
+      desc: 'Leave glowing glyphs all along your path. Then they go off, one after another. Bang, bang, bang, bang.',
+      update(e, dt, g, A) {
+        e.glyphs = e.glyphs || [];
+        if (H.dashing(e, A)) {
+          const q = H.end(e);
+          if (e.lastX === undefined || Math.abs(q.x - e.lastX) >= 12) { e.lastX = q.x; e.glyphs.push(A.spawn(e, GLYPH, { x: q.x, y: q.y + 2 })); }
+          return;
+        }
+        e.glyphs.forEach((gl, i) => { if (H.since(e) > 0.15 + i * 0.07) gl.go = true; });
+        if (e.glyphs.every((gl) => gl.done)) e.dead = true;
+      },
+    };
+
+    // -------------------------------------------------------------- POISON
+    const BLIGHT = H.proj(GLOB, { life: 0.45, r: 3, gravity: 220, onHit(b, A) { A.puff(b, b.x, b.y, 3); for (let i = 0; i < 2; i++) A.spawn(b, BUBBLE, { x: b.x + A.rnd(-3, 3), y: b.y }); } });
+    K.poison.m1Up = {
+      name: 'Blight Spray', dmg: 3.5, cd: 0.5, kind: 'custom', life: 0.01,
+      desc: 'Spray a wide burst of venom like a very angry garden hose. Up close, every drop hits.',
+      spawn(e, g, A) {
+        H.at(e, A, 8, -1);
+        for (let i = 0; i < 6; i++) { const a = (i - 2.5) * 0.15 + A.rnd(-0.04, 0.04), sp = A.rnd(230, 290); A.spawn(e, BLIGHT, { vx: Math.cos(a) * sp * e.dir, vy: Math.sin(a) * sp - 30 }); }
+        A.sfx('swing');
+      },
+    };
+    K.poison.dashUp = {
+      name: 'Miasma Dash', dmg: 7, life: 1.4,
+      desc: 'Dash through and leave a cloud of toxic gas hanging in the air behind you. Do not breathe in.',
+      update(e, dt, g, A) {
+        if (H.dashing(e, A)) return;
+        if (!e.S) e.S = H.span(e);
+        const s = H.sc(e), S = e.S, y = e.pts[0].y;
+        if (e.t < e.life - 0.3) A.tick(e, { x: S.x0 - 10, y: y - 16 * s, w: S.x1 - S.x0 + 20, h: 30 * s }, 0.3, { kb: 0 });
+        if (Math.random() < dt * 14) A.spawn(e, BUBBLE, { x: A.rnd(S.x0, S.x1), y: y + A.rnd(-8, 8) });
+      },
+      draw(e, ctx, ox, oy, A) {
+        if (!e.pts) return;
+        const P = e.pal, s = H.sc(e), out = Math.min(1, (e.life - e.t) / 0.4); let i = 0;
+        H.along(e, 6, (x, y) => {
+          const grow = U.clamp((e.t - i * 0.012) / 0.3, 0, 1), r = (5 + 3 * Math.sin(i * 1.7)) * s * (0.5 + grow * 0.6);
+          A.alpha(ctx, 0.45 * out * grow, () => A.disc(ctx, x + ox + Math.sin(e.t * 3 + i) * 2, y + oy + Math.cos(e.t * 2 + i) * 3, Math.max(1, Math.round(r)), i % 2 ? P.c : P.d));
+          if (i % 3 === 0) A.alpha(ctx, out * grow, () => A.px(ctx, x + ox, y + oy - r * 0.6 - ((e.t * 10 + i) % 4), 1, 2, P.l));   // fumes rising off it
+          i++;
+        });
+      },
+    };
+  }
 })(window.ERX = window.ERX || {});

@@ -16,7 +16,7 @@
   const RED = '#ff4a6a', BLUE = '#4a6aff';
   const FIELD = (ctx, A, x0, y0, x1, y1, t, n, col) => { for (let k = 1; k <= n; k++) { const bow = k * 6; for (let i = 0; i <= 16; i++) { const q = i / 16; if ((i + Math.floor(t * 20)) % 3 === 0) continue; A.px(ctx, U.lerp(x0, x1, q), U.lerp(y0, y1, q) - Math.sin(q * Math.PI) * bow, 1, 1, col); } } };
   K.magnetism = {
-    status: 'magnetize', up: '#c8ff4a', fx: 'field', block: ['Magnetic Field', 'shield'], dash: ['Rail Dash', 'ghost'],
+    status: 'magnetize', fx: 'field', block: ['Magnetic Field', 'shield'], dash: ['Rail Dash', 'ghost'],
     m1: {
       name: 'Polarity Shot', dmg: 7, cd: 0.4, kind: 'custom', life: 0.01,
       desc: 'Fire a magnetic bolt. It alternates red and blue. The enemies alternate between ow and OW.',
@@ -120,7 +120,7 @@
   // ===================================================================== TIME
   const CLOCK = (ctx, A, x, y, r, t, P, fast) => { A.disc(ctx, x, y, r, '#2a2418'); A.ring(ctx, x, y, r, P.c); A.ring(ctx, x, y, r - 1, P.d); for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; A.px(ctx, x + Math.cos(a) * (r - 2), y + Math.sin(a) * (r - 2), 1, 1, i % 3 ? P.l : '#ffffff'); } const m = t * (fast || 1) * 6, h = m / 12; A.line(ctx, x, y, x + Math.cos(m - Math.PI / 2) * (r - 3), y + Math.sin(m - Math.PI / 2) * (r - 3), '#ffffff'); A.line(ctx, x, y, x + Math.cos(h - Math.PI / 2) * (r - 5), y + Math.sin(h - Math.PI / 2) * (r - 5), P.l); };
   K.time = {
-    status: 'slow', up: '#7ab8ff', fx: 'clock', block: ['Stasis Field', 'bubble'], dash: ['Time Skip', 'blink'],
+    status: 'slow', fx: 'clock', block: ['Stasis Field', 'bubble'], dash: ['Time Skip', 'blink'],
     m1: {
       name: 'Clock Hand', dmg: 9, cd: 0.45, kind: 'custom', life: 0.25,
       desc: 'Swing a giant clock hand from twelve to three. Tick.',
@@ -216,7 +216,7 @@
   const WARP = (ctx, A, x, y, r, t, col) => { for (let i = 0; i < 3; i++) { const rr = r * (1 - ((t * 1.5 + i / 3) % 1)); A.ring(ctx, x, y, rr, col, rr * 0.35, 2); } };
   const ROCK = (ctx, A, x, y, s) => { A.px(ctx, x - s, y - s, s * 2, s * 2 - 1, '#6a5a8a'); A.px(ctx, x - s, y - s, s * 2, 1, '#8a7ab0'); };
   K.gravity = {
-    status: 'heavy', up: '#ff5aff', fx: 'rocks', block: ['Gravity Shield', 'bubble'], dash: ['Gravity Shift', 'ghost'],
+    status: 'heavy', fx: 'rocks', block: ['Gravity Shield', 'bubble'], dash: ['Gravity Shift', 'ghost'],
     m1: {
       name: 'Gravity Pulse', dmg: 9, cd: 0.45, kind: 'custom', life: 0.01,
       desc: 'Throw a tiny, very dense ball. It is heavier than it looks. It falls fast.',
@@ -298,7 +298,7 @@
   const NOTE = { life: 1, update(e, dt) { e.x += e.vx * dt; e.y += e.vy * dt; e.vy -= 10 * dt; }, draw(e, ctx, ox, oy, A) { A.alpha(ctx, 1 - e.t / e.life, () => A.shape(ctx, 'note', e.x + ox, e.y + oy, 0, e.pal, 1, e.t)); } };
   const WAVES = (ctx, A, x, y, r, d, n, col) => { for (let i = 0; i < n; i++) A.arc(ctx, x, y, r + i * 4, d, col, 1, -0.7, 0.7); };
   K.sound = {
-    status: 'deafen', up: '#ff7ad8', fx: 'notes', block: ['Sound Barrier', 'shield'], dash: ['Sonic Boom', 'ghost'],
+    status: 'deafen', fx: 'notes', block: ['Sound Barrier', 'shield'], dash: ['Sonic Boom', 'ghost'],
     m1: {
       name: 'Sonic Pulse', dmg: 7, cd: 0.38, kind: 'custom', life: 0.01,
       desc: 'Fire a pulse of sound. It goes ))) and then it goes OW.',
@@ -397,7 +397,7 @@
   const FOG = (ctx, A, x, y, r, col, a) => A.alpha(ctx, a, () => A.disc(ctx, x, y, Math.round(r), col));
   const PUFF = { life: 1, update(e, dt) { e.x += e.vx * dt; e.y += e.vy * dt; e.vx *= 1 - dt; }, draw(e, ctx, ox, oy, A) { FOG(ctx, A, e.x + ox, e.y + oy, 3 + e.t * 6, '#dce4ec', 0.5 * (1 - e.t / e.life)); } };
   K.mist = {
-    status: 'blind', up: '#9a7aff', fx: 'fog', block: ['Mist Veil', 'veil'], dash: ['Vanish', 'blink'],
+    status: 'blind', fx: 'fog', block: ['Mist Veil', 'veil'], dash: ['Vanish', 'blink'],
     m1: {
       name: 'Mist Needles', dmg: 3, cd: 0.42, kind: 'custom', life: 0.15,
       desc: 'Condense the air into three thin needles of water and flick them.',
@@ -493,7 +493,7 @@
   const GHOST = (ctx, A, x, y, s, col, t) => { const w = 4 * s, h = 6 * s; A.disc(ctx, x, y - h / 2, Math.round(w), col); A.px(ctx, x - w, y - h / 2, w * 2, h, col); for (let i = 0; i < 3; i++) A.px(ctx, x - w + i * (w * 2 / 3) + (Math.floor(t * 8 + i) % 2), y + h / 2, Math.max(1, w * 2 / 3 - 1), 2, col); A.px(ctx, x - w / 2 - 1, y - h / 2, 1 * Math.max(1, s), 2 * Math.max(1, s), '#120c1a'); A.px(ctx, x + w / 2, y - h / 2, 1 * Math.max(1, s), 2 * Math.max(1, s), '#120c1a'); };
   const WISP = (b, ctx, ox, oy, A) => { A.disc(ctx, b.x + ox, b.y + oy, 2, b.pal.l, '#ffffff'); A.alpha(ctx, 0.5, () => A.px(ctx, b.x + ox - b.vx * 0.03 - 1, b.y + oy - b.vy * 0.03 - 1, 2, 2, b.pal.c)); };
   K.spirit = {
-    status: 'haunt', up: '#ffd34d', fx: 'souls', block: ['Ghost Guard', 'veil'], dash: ['Ghost Walk', 'blink'],
+    status: 'haunt', fx: 'souls', block: ['Ghost Guard', 'veil'], dash: ['Ghost Walk', 'blink'],
     m1: {
       name: 'Spirit Palm', dmg: 9, cd: 0.45, kind: 'custom', life: 0.3,
       desc: 'Thrust your palm. A big ghostly hand shoves forward with it.',
@@ -593,7 +593,7 @@
   }
   const GLITCHY = (ctx, A, x, y, w, h, t) => { for (let i = 0; i < 8; i++) { const yy = y + ((i * 11 + Math.floor(t * 40) * 3) % Math.max(1, h)); A.px(ctx, x + ((i * 5 + Math.floor(t * 30)) % 7) - 3, yy, w, 1, ERX.Abilities.toHex(ERX.Abilities.rainbowColor(t * 3 + i))); } };
   K.chaos = {
-    status: 'random', up: 'rainbow', fx: 'chaos', block: ['Chaos Ward', 'shield'], dash: ['Glitch Dash', 'blink'],
+    status: 'random', fx: 'chaos', block: ['Chaos Ward', 'shield'], dash: ['Glitch Dash', 'blink'],
     m1: {
       name: 'Chaos Strike', dmg: 10, cd: 0.42, kind: 'custom', life: 0.01,
       desc: 'Every swing is a different element\'s basic attack. You do not get to choose which.',
@@ -674,4 +674,316 @@
       },
     },
   };
+
+  // ============================================================ UPGRADED M1s + DASHES
+  // (see kits-1.js: M1+ swaps in m1Up, DASH+ adds dashUp; same colours, just bigger, faster, stronger, more detailed)
+  {
+    const W = () => ERX.AwkHelp;
+
+    // ----------------------------------------------------------- MAGNETISM
+    K.magnetism.m1Up = {
+      name: 'Horseshoe Magnet', dmg: 9, cd: 0.55, kind: 'custom', life: 1.1,
+      desc: 'Throw a giant horseshoe magnet. It sticks where it lands, drags everything nearby into a pile, then blasts the pile apart.',
+      spawn(e, g, A) { H.at(e, A, 6, -4); e.vx = e.dir * 190; e.vy = -140; A.sfx('swing'); },
+      update(e, dt, g, A) {
+        const s = H.sc(e);
+        if (!e.stuck) {
+          e.vy += 600 * dt; e.x += e.vx * dt * 1.2; e.y += e.vy * dt;
+          const t = A.near(e.x, e.y, 7 * s);
+          if (t) A.damage(e, t, 0.6, 0.1);
+          if (t || A.solid(e.x, e.y + 5) || e.t > 0.6) { e.stuck = e.t; e.life = e.t + 0.6; A.sfx('hitMetal', { minGap: 0.05 }); }
+          return;
+        }
+        if (e.t - e.stuck < 0.45) { for (const o of H.nearby(A, e.x, e.y, 52 * s)) H.shove(A, o.t, Math.sign(e.x - o.c.x) * Math.min(Math.abs(e.x - o.c.x), 100 * dt), 0); }
+        else if (!e.boom) { e.boom = true; e.hit.clear(); A.hitR(e, e.x, e.y, 24 * s, { kb: 1.5 }); A.spawn(e, W().SHOCK, { x: e.x, y: e.y, r: 22 * s }); A.shake(2, 0.12); A.sfx('boom', { minGap: 0.05 }); }
+      },
+      draw(e, ctx, ox, oy, A) {
+        if (e.boom) return;
+        const P = e.pal, s = H.sc(e), x = e.x + ox, y = e.y + oy, r = 6 * s, rot = e.stuck ? 0 : e.t * 18;
+        if (e.stuck) {
+          const k = e.t - e.stuck;
+          for (const o of H.nearby(A, e.x, e.y, 52 * s)) FIELD(ctx, A, x, y, o.c.x + ox, o.c.y + oy, e.t, 2, P.l);
+          A.alpha(ctx, 0.5, () => A.ring(ctx, x, y, 52 * s * (1 - ((k * 2.2) % 1)), P.c, 52 * s * (1 - ((k * 2.2) % 1)) * 0.6));   // the pull, rippling inwards
+        }
+        // the horseshoe: a thick U with a red arm and a blue arm
+        for (let i = 0; i <= 12; i++) { const a = rot + Math.PI * (i / 12), hx = x + Math.cos(a) * r, hy = y + Math.sin(a) * r; A.px(ctx, hx - 1, hy - 1, 3, 3, P.d); A.px(ctx, hx - 1, hy - 1, 2, 2, P.c); }
+        const ux = Math.sin(rot), uy = -Math.cos(rot);
+        for (const side of [0, 1]) { const a = rot + side * Math.PI, ex = x + Math.cos(a) * r, ey = y + Math.sin(a) * r; A.line(ctx, ex, ey, ex + ux * 4 * s, ey + uy * 4 * s, side ? BLUE : RED, 3); A.px(ctx, ex + ux * 4 * s - 1, ey + uy * 4 * s - 1, 3, 2, '#ffffff'); }
+      },
+    };
+    K.magnetism.dashUp = {
+      name: 'Mag Drag', dmg: 14, life: 0.55,
+      desc: 'Turn into a magnet mid-dash. Everything nearby gets dragged along after you, then clamped hard when you stop.',
+      update(e, dt, g, A) {
+        const p = A.p, s = H.sc(e);
+        if (H.dashing(e, A)) { for (const o of H.nearby(A, p.cx, p.y + 10, 50 * s)) H.shove(A, o.t, Math.sign(p.cx - o.c.x) * Math.min(Math.abs(p.cx - o.c.x), 200 * dt) + p.facing * 150 * dt, 0); return; }
+        if (!e.clamp) { e.clamp = e.t; const q = H.end(e); A.hitR(e, q.x, q.y, 28 * s, { kb: 1.3 }); A.spawn(e, W().SHOCK, { x: q.x, y: q.y, r: 24 * s }); A.sfx('hitMetal', { minGap: 0.05 }); A.shake(2, 0.12); }
+      },
+      draw(e, ctx, ox, oy, A) {
+        if (!e.pts) return;
+        const P = e.pal, s = H.sc(e);
+        if (!e.over) {
+          const p = A.p, x = p.cx + ox, y = p.y + 10 + oy;
+          for (const o of H.nearby(A, p.cx, p.y + 10, 50 * s)) FIELD(ctx, A, x, y, o.c.x + ox, o.c.y + oy, e.t, 2, P.l);
+          A.ring(ctx, x, y, 8 * s, RED, 10 * s, 2); A.ring(ctx, x, y, 6 * s, BLUE, 8 * s, 2);
+          return;
+        }
+        const k = (e.t - e.clamp) / 0.3;
+        if (k > 1) return;
+        const q = H.end(e);
+        A.alpha(ctx, 1 - k, () => { for (let i = 0; i < 8; i++) { const a = i * 0.785 + k * 2, r = (6 + k * 20) * s; A.line(ctx, q.x + ox + Math.cos(a) * r * 0.5, q.y + oy + Math.sin(a) * r * 0.5, q.x + ox + Math.cos(a) * r, q.y + oy + Math.sin(a) * r, i % 2 ? RED : BLUE, 2); } });
+      },
+    };
+
+    // ---------------------------------------------------------------- TIME
+    K.time.m1Up = {
+      name: 'Full Circle', dmg: 9, cd: 0.55, kind: 'custom', life: 0.5,
+      desc: 'A giant clock hand sweeps all the way round you. Twice. Nobody is safe from the passage of time.',
+      spawn(e, g, A) { H.at(e, A, 0, -2); e.lap = 0; e.a = -Math.PI / 2; A.sfx('swing'); },
+      update(e, dt, g, A) {
+        H.at(e, A, 0, -2);
+        const s = H.sc(e), R = 34 * s, k = Math.min(1, e.t / 0.42), lap = Math.floor(k * 2);
+        e.a = -Math.PI / 2 + k * Math.PI * 4 * e.dir;
+        if (lap > e.lap && lap < 2) { e.lap = lap; e.hit.clear(); A.sfx('swing', { minGap: 0.02 }); }
+        if (k < 1) for (let r = 6; r <= R; r += 6) A.hitR(e, e.x + Math.cos(e.a) * r, e.y + Math.sin(e.a) * r, 5 * s, { kb: 0.6 });
+      },
+      draw(e, ctx, ox, oy, A) {
+        const P = e.pal, s = H.sc(e), R = 34 * s, x = e.x + ox, y = e.y + oy, a = e.a;
+        A.alpha(ctx, A.fade(e, 0.05, 0.1), () => {
+          A.alpha(ctx, 0.35, () => A.ring(ctx, x, y, R, P.c));   // a clock face round you
+          for (let i = 0; i < 12; i++) { const b = (i / 12) * Math.PI * 2, big = i % 3 === 0; A.px(ctx, x + Math.cos(b) * R - (big ? 1 : 0), y + Math.sin(b) * R - (big ? 1 : 0), big ? 2 : 1, big ? 2 : 1, big ? '#ffffff' : P.l); }
+          for (let j = 1; j <= 6; j++) { const b = a - e.dir * j * 0.12; A.alpha(ctx, 0.5 * (1 - j / 7), () => A.line(ctx, x, y, x + Math.cos(b) * R, y + Math.sin(b) * R, P.c, 2)); }   // the sweep behind the hand
+          const hx = x + Math.cos(a) * R, hy = y + Math.sin(a) * R;
+          A.line(ctx, x, y, hx, hy, P.d, 4); A.line(ctx, x, y, hx, hy, P.l, 2);
+          for (const da of [-0.5, 0.5]) A.line(ctx, hx, hy, hx - Math.cos(a + da) * 6 * s, hy - Math.sin(a + da) * 6 * s, '#ffffff', 2);   // the arrow tip
+          A.disc(ctx, x, y, Math.round(2 * s), '#ffffff');
+        });
+      },
+    };
+    K.time.dashUp = {
+      name: 'Instant Replay', dmg: 14, life: 0.95,
+      desc: 'Half a second after you dash, a ghost of you replays it. Same path, same hits. Time is a flat circle.',
+      update(e, dt, g, A) {
+        H.dashing(e, A);
+        const rt = e.t - 0.5;
+        e.ghost = false;
+        if (rt < 0 || !e.over) return;
+        const q = e.pts.find((p2) => p2.t >= rt) || H.end(e);
+        e.gx = q.x; e.gf = q.f; e.ghost = rt <= H.end(e).t + 0.05;
+        if (e.ghost) A.hit(e, { x: q.x - 9, y: q.f - 22, w: 18, h: 22 }, { dir: e.dir, kb: 0.9 });
+      },
+      draw(e, ctx, ox, oy, A) {
+        const P = e.pal, s = H.sc(e);
+        if (e.over && e.t < 0.5) { const o = e.pts[0]; A.alpha(ctx, Math.min(1, (e.t - 0.16) / 0.1), () => CLOCK(ctx, A, o.x + ox, o.y - 20 + oy, Math.round(5 * s), -e.t * 6, P, 8)); }   // winding back...
+        if (!e.ghost) return;
+        A.alpha(ctx, 0.4, () => H.drawGhost(ctx, A, 'dash', e.gx - e.dir * 6 + ox, e.gf + oy, e.dir, P.c));
+        A.alpha(ctx, 0.75, () => H.drawGhost(ctx, A, 'dash', e.gx + ox, e.gf + oy, e.dir, P.l));
+        A.text(ctx, '> REPLAY', e.gx + ox, e.gf - 34 + oy, P.l);
+      },
+    };
+
+    // ------------------------------------------------------------- GRAVITY
+    K.gravity.m1Up = {
+      name: 'Gravity Wave', dmg: 7, cd: 0.5, kind: 'custom', life: 0.75,
+      desc: 'Send out a ripple in space itself. Everything it passes through gets heavier, slower and slammed into the floor.',
+      spawn(e, g, A) { H.at(e, A, 12, -2); e.vx = e.dir * 120; },
+      update(e, dt, g, A) {
+        const s = H.sc(e);
+        e.x += e.vx * dt * 1.2;
+        A.tick(e, { x: e.x - 7 * s, y: e.y - 18 * s, w: 14 * s, h: 36 * s }, 0.2, { kb: 0.1, onHit: (t) => { if (!t.tutorial && !t.immovable) t.vy = Math.max(t.vy || 0, 220); } });
+        if (A.solid(e.x, e.y)) e.dead = true;
+      },
+      draw(e, ctx, ox, oy, A) {
+        const P = e.pal, s = H.sc(e), x = e.x + ox, y = e.y + oy;
+        A.alpha(ctx, A.fade(e, 0.08, 0.15), () => {
+          for (let i = 0; i < 4; i++) {   // ripples peeling off behind it
+            const ph = (e.t * 3 + i / 4) % 1, rx = (3 + ph * 8) * s, ry = (8 + ph * 14) * s, rxx = x - e.dir * ph * 10 * s;
+            A.alpha(ctx, 1 - ph, () => { A.ring(ctx, rxx, y, rx, P.l, ry); A.ring(ctx, rxx, y, rx + 1, P.c, ry + 1); A.ring(ctx, rxx, y, Math.max(1, rx - 1), '#ffffff', Math.max(1, ry - 1), 2); });
+          }
+          A.glow(ctx, x, y, 5 * s, P.d, 0.3);
+          for (let gx = -2; gx <= 2; gx++) for (let gy = -3; gy <= 3; gy++) {   // space bending: a grid of dots pulled towards the middle
+            const dx = gx * 5 * s, dy = gy * 5 * s, pull = 1 - (Math.min(1, (6 * s) / Math.max(1, Math.hypot(dx, dy))) * 0.5);
+            A.px(ctx, x + dx * pull, y + dy * pull, 1, 1, P.d);
+          }
+          A.disc(ctx, x, y, Math.round(2 * s), '#05020a'); A.ring(ctx, x, y, Math.round(2 * s) + 1, P.l);
+        });
+      },
+    };
+    const SATELLITE = H.proj((b, ctx, ox, oy, A) => ROCK(ctx, A, b.x + ox, b.y + oy, b.up ? 3 : 2), { life: 0.45, r: 4 });
+    K.gravity.dashUp = {
+      name: 'Satellite Rush', dmg: 10, life: 0.4,
+      desc: 'Dash with rocks orbiting round you like moons. When you stop, they all fly off in every direction.',
+      update(e, dt, g, A) {
+        const p = A.p, s = H.sc(e), R = 14 * s;
+        if (H.dashing(e, A)) { for (let i = 0; i < 4; i++) { const a = e.t * 18 + i * 1.57; A.tickR(e, p.cx + Math.cos(a) * R, p.y + 10 + Math.sin(a) * R * 0.6, 5 * s, 0.2, { kb: 0.5 }); } return; }
+        if (!e.thrown) {
+          e.thrown = true; const q = H.end(e);
+          for (let i = 0; i < 4; i++) { const a = e.t * 18 + i * 1.57; A.spawn(e, SATELLITE, { x: q.x + Math.cos(a) * R, y: q.y + Math.sin(a) * R * 0.6, vx: Math.cos(a) * 240, vy: Math.sin(a) * 160 - 40, dmg: e.dmg * 0.8 }); }
+          A.sfx('whoosh');
+        }
+      },
+      draw(e, ctx, ox, oy, A) {
+        if (!e.pts || e.over) return;
+        const p = A.p, s = H.sc(e), R = 14 * s, x = p.cx + ox, y = p.y + 10 + oy;
+        A.alpha(ctx, 0.3, () => A.ring(ctx, x, y, R, e.pal.c, R * 0.6));
+        for (let i = 0; i < 4; i++) { const a = e.t * 18 + i * 1.57; ROCK(ctx, A, x + Math.cos(a) * R, y + Math.sin(a) * R * 0.6, Math.round(2 * s)); }
+      },
+    };
+
+    // --------------------------------------------------------------- SOUND
+    K.sound.m1Up = {
+      name: 'Tuning Fork', dmg: 6, cd: 0.5, kind: 'custom', life: 0.5,
+      desc: 'Slam a giant tuning fork into the ground. It hums so hard that three rings of sound roll out of it. Mmmmmmm.',
+      spawn(e, g, A) { H.at(e, A, 0); e.fx = e.x + e.dir * 22 * H.sc(e); e.gy = H.floor(A, e.fx); e.n = 0; },
+      update(e, dt, g, A) {
+        const s = H.sc(e);
+        while (e.n < 3 && e.t >= 0.08 + e.n * 0.1) {
+          e.hit.clear(); A.hitR(e, e.fx, e.gy - 8, (16 + e.n * 10) * s, { kb: 0.4 + e.n * 0.2 });
+          A.sfx(e.n ? 'sndPing' : 'clap', { minGap: 0.03 }); if (!e.n) A.shake(1.5, 0.1);
+          e.n++;
+        }
+      },
+      draw(e, ctx, ox, oy, A) {
+        const P = e.pal, s = H.sc(e), x = e.fx + ox, gy = e.gy + oy, drop = Math.min(1, e.t / 0.08), hum = e.t > 0.08 ? Math.sin(e.t * 90) * 1.2 : 0;
+        const top = gy - (1 - drop) * 30 - 26 * s;
+        A.alpha(ctx, A.fade(e, 0.02, 0.12), () => {
+          A.line(ctx, x, top + 18 * s, x, gy, P.d, 3);   // the fork: a handle and two buzzing prongs
+          for (const side of [-1, 1]) A.line(ctx, x + side * (3 * s + hum), top, x + side * 3 * s, top + 18 * s, P.l, 2);
+          A.line(ctx, x - 3 * s, top + 18 * s, x + 3 * s, top + 18 * s, P.c, 2);
+          A.px(ctx, x - 3 * s - 1 + hum, top, 2, 2, '#ffffff');
+          for (let i = 0; i < e.n; i++) { const k = (e.t - 0.08 - i * 0.1) / 0.3; if (k >= 0 && k < 1) A.alpha(ctx, 1 - k, () => { const R = (16 + i * 10) * s * (0.4 + k * 0.6); A.ring(ctx, x, gy - 6, R, P.c, R * 0.4); A.ring(ctx, x, gy - 6, R * 0.8, '#ffffff', R * 0.32, 2); }); }
+        });
+      },
+    };
+    K.sound.dashUp = {
+      name: 'Doppler Rush', dmg: 12, life: 0.5,
+      desc: 'Move so fast the sound bunches up in front of you, then let it all go at once. NEEEEOWWW. BOOM.',
+      update(e, dt, g, A) {
+        if (H.dashing(e, A)) { H.dashBody(e, A, { kb: 0.3, mult: 0.5 }); return; }
+        if (!e.burst) { e.burst = e.t; const q = H.end(e), s = H.sc(e), L = 44 * s; e.hit.clear(); A.hit(e, { x: e.dir > 0 ? q.x : q.x - L, y: q.y - 14 * s, w: L, h: 28 * s }, { dir: e.dir, kb: 1.5 }); A.sfx('sndBass', { minGap: 0.05 }); A.shake(2, 0.12); }
+      },
+      draw(e, ctx, ox, oy, A) {
+        if (!e.pts) return;
+        const P = e.pal, s = H.sc(e);
+        if (!e.over) { const p = A.p; for (let i = 0; i < 4; i++) A.arc(ctx, p.cx + ox + e.dir * (6 + i * 2), p.y + 10 + oy, 8 * s + i, e.dir, i % 2 ? P.l : '#ffffff', 1, -0.9, 0.9); return; }   // the sound piling up in front of you
+        const k = (e.t - e.burst) / 0.3;
+        if (k > 1) return;
+        const q = H.end(e);
+        A.alpha(ctx, 1 - k, () => WAVES(ctx, A, q.x + ox + e.dir * k * 30 * s, q.y + oy, (6 + k * 10) * s, e.dir, 4, P.c));
+      },
+    };
+
+    // ---------------------------------------------------------------- MIST
+    K.mist.m1Up = {
+      name: 'Shroud Sweep', dmg: 12, cd: 0.5, kind: 'custom', life: 0.5,
+      desc: 'Sweep a tall curtain of cold mist forward. It cuts through everything it passes and leaves them blind.',
+      spawn(e, g, A) { H.at(e, A, 8, -2); e.vx = e.dir * 200; },
+      update(e, dt, g, A) {
+        const s = H.sc(e), h = 22 * s;
+        e.x += e.vx * dt * 1.2;
+        A.hit(e, { x: e.x - 5 * s, y: e.y - h, w: 10 * s, h: h * 1.6 }, { dir: e.dir, kb: 0.4 });
+        if (Math.random() < dt * 20) A.spawn(e, PUFF, { x: e.x - e.dir * 4, y: e.y + A.rnd(-h, h * 0.5), vx: -e.dir * 20, vy: A.rnd(-8, 8), life: 0.6 });
+        if (A.solid(e.x, e.y)) e.dead = true;
+      },
+      draw(e, ctx, ox, oy, A) {
+        const P = e.pal, s = H.sc(e), h = 22 * s, x = e.x + ox, y = e.y + oy;
+        A.alpha(ctx, A.fade(e, 0.05, 0.15), () => {
+          for (let yy = -h; yy <= h * 0.6; yy++) {   // a wavy sheet of mist, curving back at the ends, with droplets glinting on its edge
+            const bend = Math.sin(yy * 0.25 + e.t * 18) * 2 * s - (yy / h) * (yy / h) * e.dir * 4 * s, w = 4 * s * (1 - Math.abs(yy) / (h * 1.2));
+            A.alpha(ctx, 0.55, () => A.px(ctx, x + bend - e.dir * w, y + yy, w, 1, P.c));
+            A.px(ctx, x + bend, y + yy, 1, 1, (Math.floor(yy) + Math.floor(e.t * 30)) % 7 === 0 ? '#ffffff' : P.l);
+          }
+        });
+      },
+    };
+    K.mist.dashUp = {
+      name: 'Whiteout', dmg: 11, life: 1.1,
+      desc: 'Vanish into a bank of fog that billows out along your path and blinds anything caught inside it.',
+      update(e, dt, g, A) {
+        if (H.dashing(e, A) || e.S) return;
+        e.S = H.span(e);
+        const S = e.S, s = H.sc(e), y = e.pts[0].y;
+        A.hit(e, { x: S.x0 - 14, y: y - 18 * s, w: S.x1 - S.x0 + 28, h: 32 * s }, { kb: 0.3 });
+      },
+      draw(e, ctx, ox, oy, A) {
+        if (!e.pts) return;
+        const P = e.pal, s = H.sc(e), out = Math.min(1, (e.life - e.t) / 0.5); let i = 0;
+        H.along(e, 7, (x, y) => {
+          const grow = U.clamp((e.t - i * 0.015) / 0.3, 0, 1), r = (7 + 3 * Math.sin(i * 2.1)) * s * (0.4 + grow * 0.7);
+          FOG(ctx, A, x + ox + Math.sin(e.t * 2 + i) * 3, y + oy + Math.cos(e.t * 1.5 + i * 1.3) * 4, r, i % 2 ? '#e8eef4' : P.l, 0.55 * out * grow);
+          i++;
+        });
+      },
+    };
+
+    // -------------------------------------------------------------- SPIRIT
+    K.spirit.m1Up = {
+      name: 'Fox Spirit', dmg: 12, cd: 0.5, kind: 'custom', life: 0.6,
+      desc: 'Call a ghostly fox that bounds forward and runs straight through every enemy in its way. Good fox.',
+      spawn(e, g, A) { H.at(e, A, 8); e.gy = H.floor(A, e.x); e.vx = e.dir * 230; A.sfx('whoosh', { minGap: 0.05 }); },
+      update(e, dt, g, A) {
+        const s = H.sc(e);
+        e.x += e.vx * dt * 1.2;
+        const gy = A.ground(e.x, e.gy - 16);
+        if (Math.abs(gy - e.gy) < 24) e.gy = gy;
+        e.y = e.gy - 6 * s - Math.abs(Math.sin(e.t * 16)) * 5;   // bounding along
+        A.hit(e, { x: e.x - 8 * s, y: e.y - 6 * s, w: 16 * s, h: 12 * s }, { dir: e.dir, kb: 0.6 });
+        if (A.solid(e.x + e.dir * 6, e.y)) e.dead = true;
+      },
+      onEnd(e, A) { A.puff(e, e.x, e.y, 8, 1.4); },
+      draw(e, ctx, ox, oy, A) {
+        const P = e.pal, s = H.sc(e), d = e.dir, x = e.x + ox, y = e.y + oy, run = Math.sin(e.t * 32);
+        A.alpha(ctx, A.fade(e, 0.05, 0.12) * 0.9, () => {
+          A.glow(ctx, x, y, 6 * s, P.c, 0.1);
+          A.px(ctx, x - 5.5 * s, y - 2.5 * s, 11 * s, 5 * s, P.d);   // a dark outline round the body
+          A.disc(ctx, x + d * 6 * s, y - 2 * s, Math.round(3 * s), P.d);
+          for (let i = 0; i < 8; i++) { const q = i / 8, tx = x - d * (5 + i * 1.6) * s, ty = y - 1 - Math.sin(q * Math.PI) * 4 * s + Math.sin(e.t * 20 + i) * q * 2; A.disc(ctx, tx, ty, Math.max(1, Math.round((2.2 - q * 1.2) * s)), i > 5 ? '#ffffff' : P.l); }   // a big curl of a tail
+          A.px(ctx, x - 5 * s, y - 2 * s, 10 * s, 4 * s, P.l);   // body
+          A.px(ctx, x - 5 * s, y + s, 10 * s, 1, P.c);
+          A.disc(ctx, x + d * 6 * s, y - 2 * s, Math.round(2.5 * s), P.l);   // head, ears, snout, eye
+          A.tri(ctx, x + d * 5 * s, y - 4 * s, 3 * s, 4 * s, P.l, '#ffffff'); A.tri(ctx, x + d * 7.5 * s, y - 4 * s, 3 * s, 4 * s, P.l, '#ffffff');
+          A.px(ctx, x + d * 9 * s - (d < 0 ? 1 : 0), y - s, 2, 1, P.c);
+          A.px(ctx, x + d * 6.5 * s, y - 3 * s, 1, 1, P.d);
+          for (let i = 0; i < 4; i++) { const lx = x + (i < 2 ? d * 3 : -d * 3) * s + (i % 2 ? 1 : -1) * run * 2 * s; A.line(ctx, lx, y + 2 * s, lx + (i % 2 ? -1 : 1) * run * 1.5, y + 5 * s, P.l, 1); }   // legs
+        });
+      },
+    };
+    const STAMPEDER = {
+      life: 0.5,
+      update(e, dt, g, A) {
+        const p = A.p;
+        if (!e.free && p.dashT > 0) { e.x = p.cx + e.off; e.y = p.y + 10 + e.oy; } else { e.free = true; e.x += e.dir * 260 * dt; }
+        A.hitR(e, e.x, e.y, 7 * H.sc(e), { dir: e.dir, kb: 0.5 });
+      },
+      draw(e, ctx, ox, oy, A) {
+        const f = Math.min(1, (e.life - e.t) / 0.2), s = H.sc(e);
+        for (let i = 3; i >= 1; i--) A.alpha(ctx, 0.12 * f, () => GHOST(ctx, A, e.x + ox - e.dir * i * 6, e.y + oy, s * 0.8, e.pal.c, e.t));
+        const by = e.y + oy + Math.sin(e.t * 20 + e.off) * 2;
+        A.alpha(ctx, 0.9 * f, () => { GHOST(ctx, A, e.x + ox, by + 1, s * 0.95, e.pal.d, e.t); GHOST(ctx, A, e.x + ox, by, s * 0.9, e.pal.l, e.t); });
+      },
+    };
+    K.spirit.dashUp = {
+      name: 'Spirit Stampede', dmg: 5, life: 0.2,
+      desc: 'Three spirits charge alongside you, and they keep on charging after you stop. Get out of the way.',
+      spawn(e, g, A) { for (let i = 0; i < 3; i++) A.spawn(e, STAMPEDER, { off: e.dir * (4 + i * 6), oy: (i - 1) * 9 }); A.sfx('whoosh', { minGap: 0.05 }); },
+    };
+
+    // --------------------------------------------------------------- CHAOS
+    K.chaos.m1Up = {
+      name: 'Wildcard', dmg: 12, cd: 0.5, kind: 'custom', life: 0.01,
+      desc: 'Every swing is a random element\'s UPGRADED basic attack. Still no choosing. Chaos does not do choosing.',
+      spawn(e, g, A) {
+        const id = pick(OTHERS().filter((k) => ERX.Kits[k].m1Up)), kit = ERX.Kits[id], mv = kit.m1Up;
+        ERX.Abilities.castMove(g, mv, { pal: ERX.Abilities.palette(ERX.Elements.get(id), kit, true), up: true, potency: e.potency, el: 'chaos', status: Math.random() < 0.5 ? kit.status : RANDOM_ST(), dmg: (mv.dmg || 10) * (e.dmg / 12) });
+      },
+    };
+    K.chaos.dashUp = {
+      name: 'Blue Screen', dmg: 12, life: 0.01,
+      desc: 'Your dash crashes into a random element\'s upgraded dash. Please do not turn off your character.',
+      spawn(e, g, A) {
+        const id = pick(OTHERS().filter((k) => ERX.Kits[k].dashUp)), kit = ERX.Kits[id], d = kit.dashUp;
+        A.spawn(e, { spawn: d.spawn, update: d.update, draw: d.draw, onEnd: d.onEnd, life: d.life || 0.6, layer: d.layer }, { pal: ERX.Abilities.palette(ERX.Elements.get(id), kit, true), status: Math.random() < 0.5 ? kit.status : RANDOM_ST(), dmg: (d.dmg || 10) * (e.dmg / 12) });
+      },
+    };
+  }
 })(window.ERX = window.ERX || {});

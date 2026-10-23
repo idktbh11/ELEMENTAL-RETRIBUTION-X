@@ -466,24 +466,98 @@ function check(name, ok, detail) {
     check('then he walks away', await ev(`${G}.figure.walkTo !== null`) && await waitFor(`${G}.figure.gone`, 12000));
     await shot('30-free');
 
-    console.log('[jump into world 1]');
+    console.log('[the Void Recall Device]');
     await ev(`(() => { const g = ${G}; g.player.placeAt(g.level.jumpX, g.level.floorY); return true; })()`);
     await sleep(300);
     check('you can jump into the world', await ev(`!!${G}.prompt && /JUMP INTO WORLD 1/.test(${G}.prompt.text)`));
     await b.key('KeyE');
     check('...up you go', await waitFor(`${G}.state === 'launch'`, 3000));
-    await sleep(1300);
-    await shot('31-launch');
-    check('...and the slime is there. Of course.', await waitFor(`${G}.state === 'reveal' && !!${G}.rev.slime && ${G}.rev.slime.landed`, 8000));
-    let sawPatient = false;
-    for (let k = 0; k < 60 && (await ev("ERX.Scenes.top().id")) === 'game'; k++) {
-      if (/be patient/.test(await ev(`${G}.dialogue.text || ''`))) sawPatient = true;
-      await b.key('Enter', { wait: 30 }); await sleep(250);
+    check('"WAAAAIT!" the Voice comes running out of the HQ', await waitFor(`${G}.dialogue.active && /WAAA+IT/.test(${G}.dialogue.plain) && !!${G}.figure && !${G}.figure.gone`, 4000));
+    check('...and you are frozen in mid-air', await ev(`!!${G}.launch && ${G}.launch.hold === true`));
+    await shot('31-wait');
+    const seenW = [];
+    let sawPull = false, sawGift = false;
+    const vrdAnswers = [[/making up words/, 1], [/why did you tell me/, 0]];
+    for (let k = 0; k < 300 && (await ev(`!!${G}.script`)); k++) {
+      const st = await ev(`(() => { const d = ${G}.dialogue; return d.active ? (d.mode === 'say' ? 'say|' + d.speaker.name + '|' + d.plain : 'choose|' + d.choices.join(' / ')) : 'busy'; })()`);
+      if (st !== 'busy' && seenW[seenW.length - 1] !== st) seenW.push(st);
+      if (!sawPull && (await ev(`${G}.state === 'pull'`))) { sawPull = true; await sleep(400); await shot('32-telekinesis'); }
+      if (!sawGift && (await ev(`!!${G}.gift`))) { sawGift = true; await sleep(900); await shot('33-vrd'); }
+      if (st.startsWith('choose|')) {
+        const ans = vrdAnswers.find(([re]) => re.test(st.slice(7)));
+        const idx = ans ? ans[1] : 0;
+        for (let q = 0; q < idx; q++) await b.key('ArrowDown', { wait: 40 });
+        await sleep(280);
+        await b.key('Enter', { wait: 40 });
+      } else if (st.startsWith('say|')) await b.key('Enter', { wait: 30 });
+      await sleep(120);
     }
-    check('"Not here yet, be patient >:("', sawPatient);
-    check('world 1 is coming soon', await waitFor("ERX.Scenes.top().id === 'demoEnd' && /WORLD 1/.test(ERX.Scenes.top().p.title)", 6000));
-    await waitFor('ERX.Scenes.top().appearT >= 1 && !ERX.Scenes.busy', 3000);
-    await b.key('Enter');
+    const saidW = (re) => seenW.some((x) => re.test(x));
+    check('a telekinesis device drags you back down into the void', sawPull);
+    check('he forgot to give you something...', saidW(/forgot to give you something/));
+    check('...the Void Recall Device (the VRD)', sawGift && saidW(/Void Recall Device\. The VRD/) && (await ev(`ERX.Items.has(${G}.character, 'vrd')`)));
+    check('"What is this?" -> a recall device: it teleports you back to the void', saidW(/^choose\|What is this\? \/ Can I eat it\?$/) && saidW(/recall device/) && saidW(/back here\. To the void/));
+    check('...but only once you reach a Checkshot', saidW(/once you reach a Checkshot/));
+    check('"Are you just making up words?" -> he snaps (it\'s a checkpoint)', saidW(/^choose\|What is a checkshot\? \/ Are you just making up words\?$/) && saidW(/NOT MAKING UP WORDS/) && saidW(/CHECKPOINT/));
+    check('be careful: you can upgrade your element... and AWAKEN it', saidW(/Be careful/) && saidW(/upgrade it/) && saidW(/AWAKEN it/));
+    check('...but he doesn\'t know how', saidW(/\|I don't know\.$/));
+    check('"Then why did you tell me?" -> he snaps again (the deeper worlds)', saidW(/GONNA HAVE TO KNOW/) && saidW(/deeper worlds/));
+    check('*sigh* Good luck out there. You\'re gonna need it.', saidW(/Good luck out there/) && saidW(/gonna need it/));
+    check('progress saved (you have the VRD)', await ev('ERX.Saves.characters[0].progress.vrd === true && ERX.Saves.characters[0].items.indexOf("vrd") !== -1'));
+    check('...and he walks off again', await waitFor(`${G}.figure.gone`, 12000));
+
+    console.log('[entering world 1]');
+    await ev(`(() => { const g = ${G}; g.player.placeAt(g.level.jumpX, g.level.floorY); return true; })()`);
+    await sleep(300);
+    await b.key('KeyE');
+    check('this time you really jump', await waitFor(`${G}.state === 'launch'`, 3000));
+    check('2 seconds of black...', await waitFor(`${G}.state === 'skyfall' && ${G}.levelId === 'world1' && ${G}.fall.phase === 'black'`, 5000));
+    check('...then a galaxy portal opens at the top and you drop out of it (music!)', (await waitFor(`!!${G}.fall && ${G}.fall.phase === 'portal'`, 3500)) && (await waitFor("ERX.Audio.music.wanted === 'skyfall'", 1000)));
+    await sleep(1200);
+    await shot('34-portal');
+    check('falling through the void, the wind howling', (await waitFor(`!!${G}.fall && ${G}.fall.phase === 'voidFall'`, 3000)) && (await ev("ERX.Audio.ambience.wanted === 'skyfall'")));
+    check('it gets brighter, and brighter...', await waitFor(`!!${G}.fall && ${G}.fall.phase === 'bright'`, 5000));
+    check('...the light cracks...', await waitFor(`!!${G}.fall && ${G}.fall.phase === 'crack'`, 3000));
+    await sleep(700);
+    await shot('35-cracks');
+    check('...and SHATTERS: you are falling out of the sky of World 1', await waitFor(`!!${G}.fall && ${G}.fall.phase === 'sky'`, 3000));
+    await sleep(1500);
+    await shot('36-sky');
+    // the rest of the way down, fast-forwarded (no dodging: the HP never drops below 1)
+    const fall = await ev(`(() => { const g = ${G}, f = g.fall, out = { obs: 0, cloud: false, kinds: {}, minHp: 1e9 }; let t = 0;
+      while (g.fall && g.fall.phase === 'sky' && t < 20) { g.update(1 / 60, ERX.Input, true); t += 1 / 60; out.obs = Math.max(out.obs, f.obs.length); for (const o of f.obs) out.kinds[o.kind] = 1; if (f.inCloud) out.cloud = true; out.minHp = Math.min(out.minHp, g.player.hp); }
+      out.t = +(t + f.pt - t).toFixed(1); out.phase = g.fall && g.fall.phase; out.kinds = Object.keys(out.kinds).join(','); return out; })()`);
+    check('things fly at you the whole way down (birds, geese, paper planes, kites, hot-air balloons)', fall.obs > 0 && fall.kinds.split(',').length >= 3 && fall.minHp >= 1, fall);
+    check('halfway down you fall through the clouds', fall.cloud, fall);
+    check('...about 13 seconds of falling, then the ground', fall.phase === 'land', fall);
+    check('you hit the ground: a shockwave in your element\'s style, and the music hits its ending', (await ev(`${G}.effects.some((e) => e.k === ERX.SkyFall.LANDFX)`)) && (await ev("ERX.Audio.music.wanted === 'skyfallEnd'")));
+    await shot('37-landing');
+    check('...and 1.3 seconds later you get up', await waitFor(`${G}.state === 'play' && !${G}.fall`, 4000));
+    check('the grumpy slime drops in and blocks the way', await waitFor(`!!${G}.blocker && ${G}.blocker.landed`, 5000));
+    const seenS = [];
+    for (let k = 0; k < 40 && (await ev(`!!${G}.script`)); k++) {
+      const st = await ev(`(() => { const d = ${G}.dialogue; return d.active && d.mode === 'say' ? d.plain : 'busy'; })()`);
+      if (st !== 'busy' && seenS[seenS.length - 1] !== st) seenS.push(st);
+      if (st !== 'busy') await b.key('Enter', { wait: 30 });
+      await sleep(150);
+    }
+    check('"World 1? Not finished yet. Be patient >:("', seenS.some((s) => /Be patient/.test(s)), seenS);
+    await shot('38-world1');
+    check('...and nobody gets past it', await ev(`(() => { const g = ${G}, p = g.player; for (let i = 0; i < 120; i++) { p.x += 3; g.update(1 / 60, ERX.Input, true); } return p.cx < g.blocker.x; })()`));
+    check('World 1 has a day and night cycle (a full day every 10 minutes)', await ev(`(() => { const g = ${G}, a = g.worldTod; g.level.update(1, g); return Math.abs(g.worldTod - a - 1 / 600) < 1e-9 && ERX.World1Level.DAY === 600; })()`));
+    check('the slime says to go find the Checkshot', await ev(`!!${G}.objective && /CHECKSHOT/.test(${G}.objective.label)`));
+    await ev(`(() => { const g = ${G}; g.player.placeAt(g.checkshot.x, g.level.floorY); return true; })()`);
+    await sleep(300);
+    check('...there it is', await ev(`!!${G}.prompt && /ACTIVATE THE CHECKSHOT/.test(${G}.prompt.text)`));
+    await b.key('KeyE');
+    check('...activated (a checkpoint, with a cooler name)', (await waitFor(`${G}.checkshot.on && !${G}.script`, 4000)) && (await ev('ERX.Saves.characters[0].progress.checkshot1 === true')));
+    await shot('39-checkshot');
+    check('now the VRD can take you home', await ev(`!!${G}.prompt && /RECALL TO THE VOID/.test(${G}.prompt.text)`));
+    await b.key('KeyE');
+    await waitFor(`${G}.dialogue.active && ${G}.dialogue.mode === 'choose'`, 2000);
+    await sleep(300);
+    await b.key('Enter', { wait: 40 });
+    check('...poof', await waitFor(`${G}.state === 'recall'`, 2000));
     check('...back to the void', await waitFor(`ERX.Scenes.top().id === 'game' && ${G}.levelId === 'void' && !ERX.Scenes.busy`, 5000));
 
     console.log('[the HQ]');
@@ -522,6 +596,25 @@ function check(name, ok, detail) {
     check('...and can\'t if you don\'t', sawBroke && await ev("ERX.Saves.characters[0].armorOwned.indexOf('golden') === -1"));
     check('armor shows on you and soaks damage', await ev(`(() => { const p = ${G}.player; p.invulnT = 0; p.dashT = 0; p.dashGrace = 0; p.blocking = false; const hp = p.hp; p.takeHit(10, p.cx + 30); const ok = hp - p.hp === 9 && p.look.armor === ERX.Armor.get('cardboard').color; p.hp = p.maxHp; p.invulnT = 0; return ok; })()`));
     await shot('34-armor');
+
+    console.log('[inventory]');
+    await b.key('KeyI');
+    check('I opens the inventory', await waitFor("ERX.Scenes.top().id === 'inventory' && ERX.Scenes.top().appearT >= 1", 2000));
+    check('it\'s a Minecraft-style bag: 27 slots, a 9-slot hotbar and 4 armour slots (and no weapon)', await ev("(() => { const k = ERX.Scenes.top().slots.map((q) => q.k); return k.filter((x) => typeof x === 'number').length === 36 && ['head', 'chest', 'legs', 'feet'].every((a) => k.includes(a)) && k.length === 40; })()"));
+    check('your things are in it (the VRD) and the armour you bought is worn (CHEST)', await ev(`(() => { const c = ${G}.character; return c.inv.some((s) => s && s.id === 'vrd') && c.equip.chest === 'armor:cardboard'; })()`));
+    await shot('35-inventory');
+    check('click picks things up, click puts them down', await ev(`(() => { const s = ERX.Scenes.top(), c = ${G}.character, i = c.inv.findIndex((q) => q && q.id === 'vrd'); s._click(i); const held = !!s.held && s.held.id === 'vrd' && !c.inv[i]; s._click(20); return held && !s.held && !!c.inv[20] && c.inv[20].id === 'vrd'; })()`));
+    check('armour won\'t go on your head', await ev(`(() => { const s = ERX.Scenes.top(), c = ${G}.character; s._click('chest'); const up = !!s.held && s.held.id === 'armor:cardboard' && c.armor === null; s._click('head'); const refused = !!s.held && !c.equip.head; s._click('chest'); return up && refused && !s.held && c.armor === 'cardboard'; })()`));
+    check('shift-click takes armour off and puts it back on (your defence follows)', await ev(`(() => { const s = ERX.Scenes.top(), c = ${G}.character; s._click('chest', false, true); const off = c.armor === null && ERX.Inventory.defense(c) === 0; const i = c.inv.findIndex((q) => q && q.id === 'armor:cardboard'); s._click(i, false, true); return off && i >= 0 && c.armor === 'cardboard' && ERX.Inventory.defense(c) === 1; })()`));
+    check('shift-click sends things between the bag and the hotbar', await ev(`(() => { const s = ERX.Scenes.top(), c = ${G}.character; s._click(20, false, true); const i = c.inv.findIndex((q) => q && q.id === 'vrd'); return i >= 0 && i < 9; })()`));
+    check('1-9 swaps with that hotbar slot', await ev(`(() => { const s = ERX.Scenes.top(), c = ${G}.character, i = c.inv.findIndex((q) => q && q.id === 'vrd'); s._swapHot(i, 8); return !!c.inv[8] && c.inv[8].id === 'vrd'; })()`));
+    check('stacks split with a right-click and merge back together', await ev(`(() => { const s = ERX.Scenes.top(), c = ${G}.character; ERX.Items.list.__pebble = { name: 'PEBBLE', desc: 'A pebble.', stack: 16, draw() {} }; c.inv[30] = { id: '__pebble', n: 10 }; s._click(30, true); const half = !!s.held && s.held.n === 5 && c.inv[30].n === 5; s._click(31, true); const one = !!c.inv[31] && c.inv[31].n === 1 && s.held.n === 4; s._click(30); const merged = !s.held && c.inv[30].n === 9; c.inv[30] = null; c.inv[31] = null; delete ERX.Items.list.__pebble; ERX.Inventory.sync(c); return half && one && merged; })()`));
+    check('the details box draws for what you point at (no errors)', await ev("(() => { const s = ERX.Scenes.top(), cv = document.createElement('canvas'); cv.width = 600; cv.height = 340; s._tooltip(cv.getContext('2d'), 8, s._get(8), 600, 340); return true; })()"));
+    await ev("(() => { ERX.Scenes.top()._click(8); return true; })()");
+    await b.key('Escape');
+    check('closing puts back whatever you were holding, and saves the bag', await waitFor("ERX.Scenes.top().id === 'game'", 2000) && await ev("(() => { const c = ERX.Saves.characters[0]; return !!c.inv[8] && c.inv[8].id === 'vrd' && c.equip.chest === 'armor:cardboard' && c.items.indexOf('vrd') !== -1 && c.armor === 'cardboard'; })()"));
+    check('an older save\'s items and armour move into the bag', await ev("(() => { const c = { items: ['vrd'], armorOwned: ['cardboard', 'leather'], armor: 'leather' }; ERX.Inventory.ensure(c); return c.inv.length === 36 && c.inv[0].id === 'vrd' && c.inv[1].id === 'armor:cardboard' && c.equip.chest === 'armor:leather' && c.armor === 'leather'; })()"));
+
     await ev(`(() => { const g = ${G}; g.player.placeAt(g.level.exit.x, g.level.floorY); return true; })()`);
     await sleep(400);
     check('the HQ door leads back to the void', await ev(`!!${G}.prompt && /BACK TO THE VOID/.test(${G}.prompt.text)`));
